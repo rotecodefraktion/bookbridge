@@ -1,0 +1,9 @@
+{
+  "id": "bookbridge",
+  "name": "BookBridge",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Bidirectional sync between Obsidian and BookStack",
+  "author": "David Krcek",
+  "isDesktopOnly": false
+}

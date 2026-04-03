@@ -1,0 +1,143 @@
+/* BookBridge Plugin Styles */
+
+.bookbridge-book-list {
+  margin-top: 8px;
+}
+
+.bookbridge-book-list-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.bookbridge-book-list-info {
+  color: var(--text-muted);
+  font-size: var(--font-smallest);
+  margin-bottom: 8px;
+}
+
+.bookbridge-book-list-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bookbridge-book-list-actions button {
+  font-size: var(--font-smallest);
+}
+
+.bookbridge-book-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.bookbridge-book-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bookbridge-book-row input[type='checkbox'] {
+  margin: 0;
+}
+
+.bookbridge-book-row label {
+  cursor: pointer;
+  flex: 1;
+}
+
+/* Push Confirm Modal */
+.bookbridge-push-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.bookbridge-push-badge {
+  font-weight: bold;
+  font-size: var(--font-smallest);
+  margin-right: 4px;
+}
+
+/* Conflict Modal */
+.bookbridge-conflict-modal .modal-content {
+  max-width: 800px;
+}
+
+.bookbridge-conflict-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.bookbridge-conflict-panel {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.bookbridge-conflict-panel pre {
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: var(--font-smallest);
+}
+
+/* Batch Conflict Modal */
+.bookbridge-batch-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bookbridge-batch-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.bookbridge-batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.bookbridge-batch-name {
+  flex: 1;
+}
+
+/* Delete Confirm Modal */
+.bookbridge-delete-desc {
+  color: var(--text-muted);
+  font-size: var(--font-small);
+}
+
+.bookbridge-delete-warning {
+  color: var(--text-error);
+  font-weight: bold;
+}
+
+.bookbridge-delete-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 8px 0;
+}
+
+.bookbridge-delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.bookbridge-delete-name {
+  flex: 1;
+}

@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Obsidian
+data.json
+
+# Environment / Secrets
+.env
+.env.*
+
+# Claude Code
+.claude/
