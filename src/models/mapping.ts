@@ -30,14 +30,14 @@ export function createEmptyMapping(): MappingData {
 
 export async function loadMapping(vault: Vault): Promise<MappingData> {
   const path = normalizePath(MAPPING_FILE);
-  const file = vault.getAbstractFileByPath(path);
 
-  if (!file) {
+  const exists = await vault.adapter.exists(path);
+  if (!exists) {
     return createEmptyMapping();
   }
 
   try {
-    const content = await vault.read(file as import('obsidian').TFile);
+    const content = await vault.adapter.read(path);
     const data = JSON.parse(content) as MappingData;
 
     if (data.version !== MAPPING_VERSION) {
@@ -59,13 +59,7 @@ export async function saveMapping(
   mapping.lastSync = new Date().toISOString();
 
   const content = JSON.stringify(mapping, null, 2);
-  const file = vault.getAbstractFileByPath(path);
-
-  if (file) {
-    await vault.modify(file as import('obsidian').TFile, content);
-  } else {
-    await vault.create(path, content);
-  }
+  await vault.adapter.write(path, content);
 }
 
 export function findEntry(

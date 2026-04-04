@@ -20,6 +20,7 @@ export function showPushConfirmModal(
 class PushConfirmModal extends Modal {
   private candidates: PushCandidate[];
   private resolve: (confirmed: boolean) => void;
+  private resolved = false;
 
   constructor(
     app: App,
@@ -62,19 +63,23 @@ class PushConfirmModal extends Modal {
           .setButtonText('Push')
           .setCta()
           .onClick(() => {
-            this.close();
+            this.resolved = true;
             this.resolve(true);
+            this.close();
           }),
       )
       .addButton((btn) =>
         btn.setButtonText('Cancel').onClick(() => {
-          this.close();
+          this.resolved = true;
           this.resolve(false);
+          this.close();
         }),
       );
   }
 
   onClose(): void {
-    this.resolve(false);
+    if (!this.resolved) {
+      this.resolve(false);
+    }
   }
 }

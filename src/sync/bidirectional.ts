@@ -4,6 +4,7 @@ import {
   MappingData,
   MappingEntry,
   findEntry,
+  findEntryByPath,
   loadMapping,
   saveMapping,
 } from '../models/mapping';
@@ -18,7 +19,7 @@ import {
   formatSyncSummary,
 } from './engine';
 import { pullSync } from './pull';
-import { pushSync } from './push';
+import { pushSync, deriveBookAndChapter } from './push';
 import { BookBridgeSettings } from '../settings';
 import {
   ConflictInfo,
@@ -64,10 +65,10 @@ export async function bidirectionalSync(
     for (const item of contents.contents) {
       if (item.type === 'page') {
         // We need the full page to get updated_at; for now use a lightweight check
-        remotePages.set(item.id, { updatedAt: '', bookId: book.id });
+        remotePages.set(item.id, { updatedAt: item.updated_at, bookId: book.id });
       } else if (item.type === 'chapter' && item.pages) {
         for (const page of item.pages) {
-          remotePages.set(page.id, { updatedAt: '', bookId: book.id });
+          remotePages.set(page.id, { updatedAt: page.updated_at, bookId: book.id });
         }
       }
     }
@@ -96,6 +97,38 @@ export async function bidirectionalSync(
     localByBookstackId.set(fm.bookstack_id, { file, hash });
   }
 
+  // Step 2b: Detect new local files (no frontmatter, not in mapping)
+  const newLocalItems: SyncItem[] = [];
+  for (const file of localFiles) {
+    const fm = readFrontmatter(app, file);
+    if (fm) continue; // already handled above
+
+    // Skip if already tracked in mapping by path
+    if (findEntryByPath(mapping, file.path)) continue;
+
+    // Must have valid book/chapter structure
+    const derived = deriveBookAndChapter(file.path, syncFolder);
+    if (!derived) continue;
+
+    // Skip empty files
+    const rawContent = await app.vault.read(file);
+    const stripped = stripFrontmatter(rawContent);
+    if (stripped.trim().length === 0) continue;
+
+    newLocalItems.push({
+      bookstackId: 0,
+      entry: null,
+      state: 'new_local',
+      localFile: file,
+      localHash: computeHash(stripped),
+      remoteUpdatedAt: null,
+    });
+  }
+
+  if (newLocalItems.length > 0) {
+    console.log(`BookBridge: Bidirectional sync found ${newLocalItems.length} new local files`);
+  }
+
   // Step 3: Determine sync actions
   const syncItems: SyncItem[] = [];
 
@@ -112,7 +145,7 @@ export async function bidirectionalSync(
     // For remote change detection, we need to fetch the actual updated_at
     // We'll do a lazy check: if the page still exists remotely
     const localHash = local?.hash ?? null;
-    const remoteUpdatedAt = remote ? 'exists' : null; // simplified; full check below
+    const remoteUpdatedAt = remote ? remote.updatedAt : null;
 
     const state = detectChangeState(
       entry,
@@ -149,9 +182,15 @@ export async function bidirectionalSync(
     (s) => s.state === 'remote_changed' || s.state === 'new_remote',
   );
   const toPush = syncItems.filter((s) => s.state === 'local_changed');
+  const newLocal = newLocalItems;
   const conflicts = syncItems.filter((s) => s.state === 'conflict');
   const deletedRemote = syncItems.filter((s) => s.state === 'deleted_remote');
   const deletedLocal = syncItems.filter((s) => s.state === 'deleted_local');
+  const unchanged = syncItems.filter((s) => s.state === 'unchanged');
+
+  console.log(
+    `BookBridge: Bidirectional sync — ${unchanged.length} unchanged, ${toPull.length} pull, ${toPush.length} push, ${newLocal.length} new local, ${conflicts.length} conflicts`,
+  );
 
   // Step 4: Handle conflicts
   if (conflicts.length > 0) {
@@ -168,8 +207,9 @@ export async function bidirectionalSync(
   }
 
   // Step 5: Execute pull for remote-changed pages
-  if (toPull.length > 0 || toPush.length > 0) {
-    setStatus(`Syncing: ${toPull.length} pull, ${toPush.length} push...`);
+  const needsPush = toPush.length > 0 || newLocal.length > 0;
+  if (toPull.length > 0 || needsPush) {
+    setStatus(`Syncing: ${toPull.length} pull, ${toPush.length} push, ${newLocal.length} new local...`);
 
     // Pull
     if (toPull.length > 0) {
@@ -184,8 +224,8 @@ export async function bidirectionalSync(
       result.errors.push(...pullResult.errors);
     }
 
-    // Push
-    if (toPush.length > 0) {
+    // Push (includes both changed and new local files — pushSync scans independently)
+    if (needsPush) {
       const pushResult = await pushSync(
         app,
         client,

@@ -2,7 +2,7 @@ import { App, Notice, TFile, TFolder, normalizePath } from 'obsidian';
 import { BookStackClient } from '../api/client';
 import { BookStackBook } from '../api/types';
 import { htmlToMarkdown, ConversionContext } from '../convert/html-to-md';
-import { downloadImages, rewriteImageUrls, rewriteAttachmentUrls } from '../convert/assets';
+import { downloadImages, downloadAttachments, rewriteAssetUrls } from '../convert/assets';
 import {
   MappingData,
   MappingEntry,
@@ -11,7 +11,7 @@ import {
   loadMapping,
   saveMapping,
 } from '../models/mapping';
-import { setFrontmatter } from '../models/frontmatter';
+import { setFrontmatter, stripFrontmatter } from '../models/frontmatter';
 import { sanitizeFileName } from '../utils/sanitize';
 import { buildPagePath } from '../utils/paths';
 import {
@@ -32,6 +32,7 @@ interface PageInfo {
   chapterId: number | null;
   chapterName: string | null;
   draft: boolean;
+  updatedAt: string;
 }
 
 export async function pullSync(
@@ -76,6 +77,8 @@ export async function pullSync(
   const total = pages.length;
   let processed = 0;
 
+  console.log(`BookBridge: Pull starting, ${selectedBooks.length} books, ${total} pages`);
+
   for (const page of pages) {
     processed++;
     setStatus(`Pulling ${processed}/${total}: ${page.name}`);
@@ -91,6 +94,7 @@ export async function pullSync(
   await saveMapping(app.vault, mapping);
 
   const summary = formatSyncSummary(result);
+  console.log(`BookBridge: Pull complete — ${result.pulled} pulled, ${result.skipped} skipped, ${result.errors.length} errors`);
   new Notice(`BookBridge: Pull complete — ${summary}`);
 
   return result;
@@ -116,6 +120,7 @@ async function collectPages(
           chapterId: null,
           chapterName: null,
           draft: false,
+          updatedAt: item.updated_at,
         });
       } else if (item.type === 'chapter' && item.pages) {
         for (const page of item.pages) {
@@ -128,6 +133,7 @@ async function collectPages(
             chapterId: item.id,
             chapterName: item.name,
             draft: page.draft,
+            updatedAt: page.updated_at,
           });
         }
       }
@@ -146,16 +152,19 @@ async function pullPage(
   page: PageInfo,
   result: SyncResult,
 ): Promise<void> {
-  // Check if page needs updating
+  // Check if page needs updating using date from book contents API (no extra request)
   const existing = findEntry(mapping, page.id);
 
-  // Fetch full page details to get updated_at
-  const fullPage = await client.getPage(page.id);
-
-  if (existing && existing.bookstackUpdatedAt === fullPage.updated_at) {
-    // No changes on remote side
+  if (existing && existing.bookstackUpdatedAt === page.updatedAt) {
+    // No changes on remote side — skip without fetching full page
+    console.log(`BookBridge: Skipping unchanged page: ${page.name}`);
+    result.skipped++;
     return;
   }
+
+  // Fetch full page details only when page actually needs updating
+  console.log(`BookBridge: Pulling page: ${page.name}`);
+  const fullPage = await client.getPage(page.id);
 
   // Get HTML content for conversion
   const html = fullPage.html || '';
@@ -163,8 +172,8 @@ async function pullPage(
 
   // Download assets and rewrite URLs
   if (settings.downloadAssets) {
-    // Download images from the original HTML
-    await downloadImages(
+    // Download images (uses original HTML to find URLs)
+    const imageMap = await downloadImages(
       app.vault,
       html,
       settings.baseUrl,
@@ -172,12 +181,18 @@ async function pullPage(
       settings.assetFolder,
     );
 
-    // Rewrite URLs in the converted markdown
-    markdown = rewriteImageUrls(markdown, settings.baseUrl, settings.assetFolder);
-    markdown = rewriteAttachmentUrls(markdown, settings.baseUrl, settings.assetFolder);
-  }
+    // Download attachments via API
+    const attachmentMap = await downloadAttachments(
+      app.vault,
+      client,
+      page.id,
+      settings.syncFolder,
+      settings.assetFolder,
+    );
 
-  const hash = computeHash(markdown);
+    // Rewrite all BookStack URLs in markdown to local paths
+    markdown = rewriteAssetUrls(markdown, imageMap, attachmentMap, settings.baseUrl);
+  }
 
   // Build vault path
   const bookFolder = sanitizeFileName(page.bookName);
@@ -198,27 +213,19 @@ async function pullPage(
   await ensureFolder(app, folderPath);
 
   // Create or update file
-  const existingFile = app.vault.getAbstractFileByPath(vaultPath);
+  const file = await createOrModify(app, vaultPath, markdown);
+  await setFrontmatter(app, file, {
+    bookstack_id: page.id,
+    bookstack_type: 'page',
+    bookstack_updated_at: fullPage.updated_at,
+    bookstack_book_id: page.bookId,
+    bookstack_chapter_id: page.chapterId ?? undefined,
+  });
 
-  if (existingFile && existingFile instanceof TFile) {
-    await app.vault.modify(existingFile, markdown);
-    await setFrontmatter(app, existingFile, {
-      bookstack_id: page.id,
-      bookstack_type: 'page',
-      bookstack_updated_at: fullPage.updated_at,
-      bookstack_book_id: page.bookId,
-      bookstack_chapter_id: page.chapterId ?? undefined,
-    });
-  } else {
-    const newFile = await app.vault.create(vaultPath, markdown);
-    await setFrontmatter(app, newFile, {
-      bookstack_id: page.id,
-      bookstack_type: 'page',
-      bookstack_updated_at: fullPage.updated_at,
-      bookstack_book_id: page.bookId,
-      bookstack_chapter_id: page.chapterId ?? undefined,
-    });
-  }
+  // Re-compute hash after frontmatter processing to match what bidirectional sync will compute
+  const finalContent = await app.vault.read(file);
+  const finalStripped = stripFrontmatter(finalContent);
+  const finalHash = computeHash(finalStripped);
 
   // Update mapping
   const entry: MappingEntry = {
@@ -228,8 +235,8 @@ async function pullPage(
     bookstackUpdatedAt: fullPage.updated_at,
     bookstackBookId: page.bookId,
     bookstackChapterId: page.chapterId,
-    localHash: hash,
-    remoteHash: hash,
+    localHash: finalHash,
+    remoteHash: finalHash,
   };
   upsertEntry(mapping, entry);
 
@@ -261,11 +268,64 @@ function buildSlugToTitle(
   return map;
 }
 
+/**
+ * Create or update a file, handling case-insensitive filesystem mismatches.
+ * On macOS, getAbstractFileByPath may not find a file that exists with different casing,
+ * so vault.create() would fail with "File already exists". In that case, fall back to modify.
+ */
+async function createOrModify(app: App, vaultPath: string, content: string): Promise<TFile> {
+  const existing = app.vault.getAbstractFileByPath(vaultPath);
+  if (existing && existing instanceof TFile) {
+    await app.vault.modify(existing, content);
+    return existing;
+  }
+
+  try {
+    return await app.vault.create(vaultPath, content);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('File already exists')) {
+      // Case-insensitive filesystem: file exists but path lookup failed.
+      // Find the file by scanning the parent folder.
+      const folderPath = vaultPath.substring(0, vaultPath.lastIndexOf('/'));
+      const fileName = vaultPath.substring(vaultPath.lastIndexOf('/') + 1);
+      const folder = app.vault.getAbstractFileByPath(folderPath);
+      if (folder && folder instanceof TFolder) {
+        const match = folder.children.find(
+          (f) => f instanceof TFile && f.name.toLowerCase() === fileName.toLowerCase(),
+        );
+        if (match && match instanceof TFile) {
+          await app.vault.modify(match, content);
+          return match;
+        }
+      }
+    }
+    throw error;
+  }
+}
+
 async function ensureFolder(app: App, path: string): Promise<void> {
   const normalized = normalizePath(path);
   const existing = app.vault.getAbstractFileByPath(normalized);
   if (existing && existing instanceof TFolder) return;
   if (!existing) {
-    await app.vault.createFolder(normalized);
+    // Create parent directories recursively, one level at a time
+    const parts = normalized.split('/');
+    let current = '';
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      const folder = app.vault.getAbstractFileByPath(current);
+      if (!folder) {
+        try {
+          await app.vault.createFolder(current);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          // Folder may already exist on case-insensitive filesystem
+          if (!msg.includes('Folder already exists')) {
+            throw error;
+          }
+        }
+      }
+    }
   }
 }

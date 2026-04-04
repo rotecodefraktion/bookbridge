@@ -32,6 +32,7 @@ export interface BookStackBookContentItem {
   name: string;
   slug: string;
   type: 'chapter' | 'page';
+  updated_at: string;
   /** Only present when type === 'chapter' */
   pages?: BookStackBookContentPage[];
 }
@@ -41,6 +42,7 @@ export interface BookStackBookContentPage {
   name: string;
   slug: string;
   draft: boolean;
+  updated_at: string;
 }
 
 export interface BookStackChapter {
@@ -92,5 +94,9 @@ export interface BookStackAttachment {
   order: number;
   created_at: string;
   updated_at: string;
-  content?: string;
+}
+
+export interface BookStackAttachmentDetail extends BookStackAttachment {
+  /** base64 encoded content for non-external attachments */
+  content: string;
 }

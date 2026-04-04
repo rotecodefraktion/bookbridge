@@ -1,15 +1,17 @@
 import { App, Notice, TFile, normalizePath } from 'obsidian';
 import { BookStackClient } from '../api/client';
+import { BookStackBook, BookStackBookContents } from '../api/types';
 import { markdownToHtml, ReverseConversionContext } from '../convert/md-to-html';
 import {
   MappingData,
   MappingEntry,
   findEntry,
+  findEntryByPath,
   upsertEntry,
   loadMapping,
   saveMapping,
 } from '../models/mapping';
-import { readFrontmatter, stripFrontmatter, setFrontmatter } from '../models/frontmatter';
+import { readFrontmatter, stripFrontmatter, setFrontmatter, BookBridgeFrontmatter } from '../models/frontmatter';
 import {
   isBookSelected,
   computeHash,
@@ -20,6 +22,92 @@ import {
 import { BookBridgeSettings } from '../settings';
 import { showPushConfirmModal, PushCandidate } from '../ui/push-confirm';
 
+/** Candidate with existing frontmatter (known to BookStack). */
+interface ExistingCandidate {
+  file: TFile;
+  frontmatter: BookBridgeFrontmatter;
+  content: string;
+  hash: string;
+  entry: MappingEntry | undefined;
+  isNewFile: false;
+}
+
+/** Candidate without frontmatter (brand-new file). */
+interface NewFileCandidate {
+  file: TFile;
+  frontmatter: null;
+  content: string;
+  hash: string;
+  entry: undefined;
+  isNewFile: true;
+  bookName: string;
+  chapterName: string | null;
+}
+
+type PushCandidateEntry = ExistingCandidate | NewFileCandidate;
+
+/**
+ * Parse the folder structure relative to the sync folder to derive
+ * book name and optional chapter name.
+ *
+ * Expected layouts:
+ *   {syncFolder}/{BookName}/Page.md           → book "BookName", no chapter
+ *   {syncFolder}/{BookName}/{Chapter}/Page.md → book "BookName", chapter "Chapter"
+ *
+ * Returns null for files that don't fit this structure (e.g. directly in syncFolder).
+ */
+export function deriveBookAndChapter(
+  filePath: string,
+  syncFolder: string,
+): { bookName: string; chapterName: string | null } | null {
+  const prefix = syncFolder + '/';
+  if (!filePath.startsWith(prefix)) return null;
+
+  const relativePath = filePath.slice(prefix.length);
+  const parts = relativePath.split('/');
+
+  // parts: ["BookName", "Page.md"] or ["BookName", "Chapter", "Page.md"]
+  if (parts.length === 2) {
+    return { bookName: parts[0], chapterName: null };
+  }
+  if (parts.length === 3) {
+    return { bookName: parts[0], chapterName: parts[1] };
+  }
+
+  // Deeper nesting or file directly in syncFolder — skip
+  return null;
+}
+
+/**
+ * Resolve a book name to a BookStack book ID, using a cached list of all books.
+ */
+export async function resolveBookId(
+  bookName: string,
+  allBooks: BookStackBook[],
+): Promise<number | null> {
+  const match = allBooks.find(
+    (b) => b.name.toLowerCase() === bookName.toLowerCase(),
+  );
+  return match ? match.id : null;
+}
+
+/**
+ * Resolve a chapter name within a book to a BookStack chapter ID.
+ */
+async function resolveChapterId(
+  client: BookStackClient,
+  bookId: number,
+  chapterName: string,
+): Promise<number | null> {
+  const bookContents: BookStackBookContents = await client.getBookContents(bookId);
+  const match = bookContents.contents.find(
+    (item) =>
+      item.type === 'chapter' &&
+      item.name.toLowerCase() === chapterName.toLowerCase(),
+  );
+  return match ? match.id : null;
+}
+
 export async function pushSync(
   app: App,
   client: BookStackClient,
@@ -29,6 +117,7 @@ export async function pushSync(
 ): Promise<SyncResult> {
   const result = createEmptySyncResult();
 
+  console.log('BookBridge: Push scanning files...');
   setStatus('Scanning local files...');
   const mapping = await loadMapping(app.vault);
 
@@ -38,51 +127,117 @@ export async function pushSync(
     (f) => f.path.startsWith(syncFolder + '/') && f.extension === 'md',
   );
 
+  console.log(`BookBridge: Push found ${files.length} markdown files in "${syncFolder}"`);
+
+  // Pre-fetch all books for resolving new file book names and filtering
+  let allBooks: BookStackBook[] | null = null;
+
   // Collect candidates for pushing
-  const candidates: Array<{
-    file: TFile;
-    frontmatter: ReturnType<typeof readFrontmatter>;
-    content: string;
-    hash: string;
-    entry: MappingEntry | undefined;
-  }> = [];
+  const candidates: PushCandidateEntry[] = [];
 
   for (const file of files) {
     const fm = readFrontmatter(app, file);
-    if (!fm) continue; // no BookBridge frontmatter, skip
 
-    // Filter by book selection
-    if (singleBookId && fm.bookstack_book_id !== singleBookId) continue;
-    if (
-      !singleBookId &&
-      !isBookSelected(fm.bookstack_book_id, settings.selectedBookIds)
-    ) {
-      continue;
+    if (fm) {
+      // --- File with existing frontmatter ---
+      // Filter by book selection
+      if (singleBookId && fm.bookstack_book_id !== singleBookId) {
+        console.log(`BookBridge: Push skipping "${file.path}" — not in selected book (singleBookId=${singleBookId})`);
+        continue;
+      }
+      if (
+        !singleBookId &&
+        !isBookSelected(fm.bookstack_book_id, settings.selectedBookIds)
+      ) {
+        console.log(`BookBridge: Push skipping "${file.path}" — book ${fm.bookstack_book_id} not selected`);
+        continue;
+      }
+
+      const rawContent = await app.vault.read(file);
+      const content = stripFrontmatter(rawContent);
+      const hash = computeHash(content);
+
+      const entry = findEntry(mapping, fm.bookstack_id);
+
+      // Check if changed locally
+      if (entry && entry.localHash === hash) continue; // no local changes
+
+      console.log(`BookBridge: Push candidate: "${file.path}", isNew=false`);
+      candidates.push({ file, frontmatter: fm, content, hash, entry, isNewFile: false });
+    } else {
+      // --- New file without frontmatter ---
+      // Skip if already tracked in mapping by vault path
+      if (findEntryByPath(mapping, file.path)) {
+        console.log(`BookBridge: Push skipping "${file.path}" — already in mapping by path`);
+        continue;
+      }
+
+      const derived = deriveBookAndChapter(file.path, syncFolder);
+      if (!derived) {
+        console.log(`BookBridge: Push skipping "${file.path}" — cannot derive book/chapter from path`);
+        continue; // cannot determine book from folder structure
+      }
+
+      // Filter new files by book selection:
+      // Resolve book name to ID and check against selection
+      if (singleBookId || settings.selectedBookIds.length > 0) {
+        if (!allBooks) {
+          setStatus('Fetching BookStack books...');
+          allBooks = await client.getAllBooks();
+        }
+        const bookId = await resolveBookId(derived.bookName, allBooks);
+        if (bookId === null) {
+          console.log(`BookBridge: Push skipping "${file.path}" — book "${derived.bookName}" not found in BookStack`);
+          continue;
+        }
+        if (singleBookId && bookId !== singleBookId) {
+          console.log(`BookBridge: Push skipping "${file.path}" — not in selected book (singleBookId=${singleBookId})`);
+          continue;
+        }
+        if (!singleBookId && !isBookSelected(bookId, settings.selectedBookIds)) {
+          console.log(`BookBridge: Push skipping "${file.path}" — book ${bookId} not selected`);
+          continue;
+        }
+      }
+
+      const rawContent = await app.vault.read(file);
+      const content = stripFrontmatter(rawContent);
+      const hash = computeHash(content);
+
+      // Skip empty files
+      if (content.trim().length === 0) {
+        console.log(`BookBridge: Push skipping "${file.path}" — file is empty`);
+        continue;
+      }
+
+      console.log(`BookBridge: Push candidate: "${file.path}", isNew=true, book="${derived.bookName}", chapter=${derived.chapterName ?? 'none'}`);
+      candidates.push({
+        file,
+        frontmatter: null,
+        content,
+        hash,
+        entry: undefined,
+        isNewFile: true,
+        bookName: derived.bookName,
+        chapterName: derived.chapterName,
+      });
     }
-
-    const rawContent = await app.vault.read(file);
-    const content = stripFrontmatter(rawContent);
-    const hash = computeHash(content);
-
-    const entry = findEntry(mapping, fm.bookstack_id);
-
-    // Check if changed locally
-    if (entry && entry.localHash === hash) continue; // no local changes
-
-    candidates.push({ file, frontmatter: fm, content, hash, entry });
   }
 
   if (candidates.length === 0) {
+    console.log('BookBridge: Push — no local changes to push');
     new Notice('BookBridge: No local changes to push');
     return result;
   }
+
+  console.log(`BookBridge: Push — ${candidates.length} candidate(s) found`);
 
   // Show confirmation modal
   const pushCandidates: PushCandidate[] = candidates.map((c) => ({
     vaultPath: c.file.path,
     bookstackId: c.frontmatter?.bookstack_id ?? null,
     pageName: c.file.basename,
-    isNew: !c.entry,
+    isNew: c.isNewFile || !c.entry,
   }));
 
   const confirmed = await showPushConfirmModal(app, pushCandidates);
@@ -94,6 +249,13 @@ export async function pushSync(
   // Build conversion context
   const conversionContext = buildConversionContext(mapping, settings);
 
+  // Pre-fetch all books once for resolving new file book/chapter IDs (if not already fetched)
+  const hasNewFiles = candidates.some((c) => c.isNewFile);
+  if (hasNewFiles && !allBooks) {
+    setStatus('Fetching BookStack books...');
+    allBooks = await client.getAllBooks();
+  }
+
   const total = candidates.length;
   let processed = 0;
 
@@ -102,20 +264,39 @@ export async function pushSync(
     setStatus(`Pushing ${processed}/${total}: ${candidate.file.basename}`);
 
     try {
-      await pushPage(
-        app,
-        client,
-        mapping,
-        conversionContext,
-        candidate.file,
-        candidate.frontmatter!,
-        candidate.content,
-        candidate.hash,
-        candidate.entry,
-        result,
-      );
+      if (candidate.isNewFile) {
+        console.log(`BookBridge: Push creating page "${candidate.file.basename}" in book "${candidate.bookName}"${candidate.chapterName ? `, chapter "${candidate.chapterName}"` : ''}`);
+        await pushNewPage(
+          app,
+          client,
+          mapping,
+          conversionContext,
+          candidate,
+          allBooks!,
+          result,
+          settings,
+        );
+        console.log(`BookBridge: Push created page "${candidate.file.basename}" successfully`);
+      } else {
+        console.log(`BookBridge: Push updating page "${candidate.file.basename}" (bookstack_id=${candidate.frontmatter.bookstack_id})`);
+        await pushPage(
+          app,
+          client,
+          mapping,
+          conversionContext,
+          candidate.file,
+          candidate.frontmatter,
+          candidate.content,
+          candidate.hash,
+          candidate.entry,
+          result,
+          settings,
+        );
+        console.log(`BookBridge: Push updated page "${candidate.file.basename}" successfully`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error(`BookBridge: Push failed for "${candidate.file.basename}": ${message}`);
       result.errors.push({
         pageId: candidate.frontmatter?.bookstack_id ?? 0,
         pageName: candidate.file.basename,
@@ -132,6 +313,95 @@ export async function pushSync(
   return result;
 }
 
+/**
+ * Push a brand-new file (no frontmatter) as a new BookStack page.
+ * Resolves book/chapter IDs from folder names, creates the page,
+ * sets frontmatter, and updates the mapping.
+ */
+async function pushNewPage(
+  app: App,
+  client: BookStackClient,
+  mapping: MappingData,
+  context: ReverseConversionContext,
+  candidate: NewFileCandidate,
+  allBooks: BookStackBook[],
+  result: SyncResult,
+  settings: BookBridgeSettings,
+): Promise<void> {
+  const { file, content, hash, bookName, chapterName } = candidate;
+
+  // Resolve book ID
+  const bookId = await resolveBookId(bookName, allBooks);
+  if (bookId === null) {
+    throw new Error(
+      `Book "${bookName}" not found in BookStack. Cannot create page "${file.basename}".`,
+    );
+  }
+  console.log(`BookBridge: Push resolved book "${bookName}" → ID ${bookId}`);
+
+  // Resolve chapter ID (optional)
+  let chapterId: number | undefined;
+  if (chapterName) {
+    const resolvedChapterId = await resolveChapterId(client, bookId, chapterName);
+    if (resolvedChapterId === null) {
+      throw new Error(
+        `Chapter "${chapterName}" not found in book "${bookName}". Cannot create page "${file.basename}".`,
+      );
+    }
+    chapterId = resolvedChapterId;
+    console.log(`BookBridge: Push resolved chapter "${chapterName}" → ID ${chapterId}`);
+  }
+
+  // Step 1: Create page with placeholder HTML (need page ID for image uploads)
+  const placeholderHtml = markdownToHtml(content, context);
+  console.log(`BookBridge: Push creating page "${file.basename}" with placeholder HTML`);
+
+  const newPage = await client.createPage({
+    book_id: bookId,
+    chapter_id: chapterId,
+    name: file.basename,
+    html: placeholderHtml,
+  });
+
+  // Step 2: Upload local images now that we have the page ID
+  const assetToUrl = await uploadLocalImages(app, client, content, newPage.id, settings);
+
+  // Step 3: If images were uploaded, update the page with final HTML containing BookStack URLs
+  if (assetToUrl.size > 0) {
+    const pushContext: ReverseConversionContext = {
+      ...context,
+      assetToUrl: new Map([...context.assetToUrl, ...assetToUrl]),
+    };
+    const finalHtml = markdownToHtml(content, pushContext);
+    console.log(`BookBridge: Push updating page "${file.basename}" with ${assetToUrl.size} uploaded image(s)`);
+    await client.updatePage(newPage.id, { html: finalHtml });
+  }
+
+  // Set frontmatter on the file
+  await setFrontmatter(app, file, {
+    bookstack_id: newPage.id,
+    bookstack_type: 'page',
+    bookstack_updated_at: newPage.updated_at,
+    bookstack_book_id: newPage.book_id,
+    bookstack_chapter_id: newPage.chapter_id || undefined,
+  });
+
+  // Add to mapping
+  const entry: MappingEntry = {
+    bookstackId: newPage.id,
+    bookstackType: 'page',
+    vaultPath: file.path,
+    bookstackUpdatedAt: newPage.updated_at,
+    bookstackBookId: newPage.book_id,
+    bookstackChapterId: newPage.chapter_id || null,
+    localHash: hash,
+    remoteHash: hash,
+  };
+  upsertEntry(mapping, entry);
+
+  result.pushed++;
+}
+
 async function pushPage(
   app: App,
   client: BookStackClient,
@@ -143,8 +413,15 @@ async function pushPage(
   hash: string,
   existingEntry: MappingEntry | undefined,
   result: SyncResult,
+  settings: BookBridgeSettings,
 ): Promise<void> {
-  const html = markdownToHtml(content, context);
+  // Upload local images and build asset-to-URL map
+  const assetToUrl = await uploadLocalImages(app, client, content, frontmatter.bookstack_id, settings);
+  const pushContext: ReverseConversionContext = {
+    ...context,
+    assetToUrl: new Map([...context.assetToUrl, ...assetToUrl]),
+  };
+  const html = markdownToHtml(content, pushContext);
 
   if (existingEntry) {
     // Update existing page
@@ -201,6 +478,62 @@ async function pushPage(
   }
 
   result.pushed++;
+}
+
+/**
+ * Scan markdown for local image references, upload each to BookStack,
+ * and return a map of local path → BookStack URL.
+ */
+async function uploadLocalImages(
+  app: App,
+  client: BookStackClient,
+  markdown: string,
+  pageId: number,
+  settings: BookBridgeSettings,
+): Promise<Map<string, string>> {
+  const assetToUrl = new Map<string, string>();
+
+  // Match all ![alt](path) references
+  const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let match;
+  const localPaths = new Set<string>();
+
+  while ((match = imageRegex.exec(markdown)) !== null) {
+    const src = match[1];
+    // Skip URLs (http/https) and data URIs
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+      continue;
+    }
+    localPaths.add(src);
+  }
+
+  if (localPaths.size === 0) return assetToUrl;
+
+  console.log(`BookBridge: Found ${localPaths.size} local images to upload`);
+
+  for (const localPath of localPaths) {
+    try {
+      const normalizedPath = normalizePath(localPath);
+      const exists = await app.vault.adapter.exists(normalizedPath);
+      if (!exists) {
+        console.warn(`BookBridge: Image file not found: ${localPath}`);
+        continue;
+      }
+
+      const imageData = await app.vault.adapter.readBinary(normalizedPath);
+      const filename = normalizedPath.split('/').pop() ?? 'image.png';
+
+      console.log(`BookBridge: Uploading image ${filename} to page ${pageId}`);
+      const uploaded = await client.uploadImage(pageId, filename, imageData);
+      assetToUrl.set(localPath, uploaded.url);
+      console.log(`BookBridge: Uploaded ${filename} → ${uploaded.url}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`BookBridge: Failed to upload image "${localPath}": ${msg}`);
+    }
+  }
+
+  return assetToUrl;
 }
 
 function buildConversionContext(

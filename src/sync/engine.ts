@@ -73,6 +73,7 @@ export function isBookSelected(
 export interface SyncResult {
   pulled: number;
   pushed: number;
+  skipped: number;
   conflicts: number;
   errors: SyncError[];
 }
@@ -84,13 +85,14 @@ export interface SyncError {
 }
 
 export function createEmptySyncResult(): SyncResult {
-  return { pulled: 0, pushed: 0, conflicts: 0, errors: [] };
+  return { pulled: 0, pushed: 0, skipped: 0, conflicts: 0, errors: [] };
 }
 
 export function formatSyncSummary(result: SyncResult): string {
   const parts: string[] = [];
   if (result.pulled > 0) parts.push(`${result.pulled} pulled`);
   if (result.pushed > 0) parts.push(`${result.pushed} pushed`);
+  if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
   if (result.conflicts > 0) parts.push(`${result.conflicts} conflicts`);
   if (result.errors.length > 0) parts.push(`${result.errors.length} errors`);
   return parts.length > 0 ? parts.join(', ') : 'No changes';

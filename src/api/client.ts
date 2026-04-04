@@ -7,6 +7,7 @@ import {
   BookStackChapter,
   BookStackImage,
   BookStackAttachment,
+  BookStackAttachmentDetail,
 } from './types';
 
 const MAX_REQUESTS_PER_SECOND = 10;
@@ -186,8 +187,98 @@ export class BookStackClient {
     return this.request<BookStackImage>(`image-gallery/${id}`);
   }
 
-  async getAttachment(id: number): Promise<BookStackAttachment> {
-    return this.request<BookStackAttachment>(`attachments/${id}`);
+  /**
+   * Upload an image to the BookStack image gallery via multipart/form-data.
+   * Manually constructs the multipart body since Obsidian doesn't have FormData.
+   */
+  async uploadImage(
+    pageId: number,
+    name: string,
+    imageData: ArrayBuffer,
+  ): Promise<BookStackImage> {
+    await this.rateLimit();
+
+    const boundary = '----BookBridge' + Date.now();
+    const encoder = new TextEncoder();
+
+    const textFields: Array<{ name: string; value: string }> = [
+      { name: 'uploaded_to', value: String(pageId) },
+      { name: 'type', value: 'gallery' },
+      { name: 'name', value: name },
+    ];
+
+    const parts: Uint8Array[] = [];
+
+    // Add text fields
+    for (const field of textFields) {
+      const header = `--${boundary}\r\nContent-Disposition: form-data; name="${field.name}"\r\n\r\n${field.value}\r\n`;
+      parts.push(encoder.encode(header));
+    }
+
+    // Add binary image field
+    const mimeType = guessMimeType(name);
+    const imageHeader = `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${name}"\r\nContent-Type: ${mimeType}\r\n\r\n`;
+    parts.push(encoder.encode(imageHeader));
+    parts.push(new Uint8Array(imageData));
+    parts.push(encoder.encode('\r\n'));
+
+    // Close boundary
+    parts.push(encoder.encode(`--${boundary}--\r\n`));
+
+    // Concatenate all parts
+    const totalLength = parts.reduce((sum, p) => sum + p.byteLength, 0);
+    const body = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const part of parts) {
+      body.set(part, offset);
+      offset += part.byteLength;
+    }
+
+    const response = await requestUrl({
+      url: `${this.baseUrl}/api/image-gallery`,
+      method: 'POST',
+      headers: {
+        Authorization: `Token ${this.tokenId}:${this.tokenSecret}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: body.buffer,
+      throw: false,
+    });
+
+    if (response.status === 401) {
+      throw new BookStackAuthError('Authentication failed. Check your API token.');
+    }
+    if (response.status >= 400) {
+      const message = response.json?.error?.message ?? `HTTP ${response.status}`;
+      throw new BookStackApiError(message, response.status);
+    }
+
+    return response.json as BookStackImage;
+  }
+
+  async getAttachmentsForPage(pageId: number): Promise<BookStackListResponse<BookStackAttachment>> {
+    return this.request<BookStackListResponse<BookStackAttachment>>(
+      `attachments?filter[uploaded_to]=${pageId}`,
+    );
+  }
+
+  async getAttachment(id: number): Promise<BookStackAttachmentDetail> {
+    return this.request<BookStackAttachmentDetail>(`attachments/${id}`);
+  }
+
+  /** Download attachment binary content directly as ArrayBuffer. */
+  async downloadAttachmentFile(id: number): Promise<ArrayBuffer> {
+    await this.rateLimit();
+
+    const response = await requestUrl({
+      url: `${this.baseUrl}/api/attachments/${id}`,
+      method: 'GET',
+      headers: {
+        Authorization: `Token ${this.tokenId}:${this.tokenSecret}`,
+      },
+    });
+
+    return response.arrayBuffer;
   }
 }
 
@@ -213,4 +304,19 @@ export class BookStackNotFoundError extends BookStackApiError {
     super(message, 404);
     this.name = 'BookStackNotFoundError';
   }
+}
+
+/** Guess MIME type from filename extension for image uploads. */
+function guessMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const mimeTypes: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    bmp: 'image/bmp',
+  };
+  return mimeTypes[ext] ?? 'application/octet-stream';
 }

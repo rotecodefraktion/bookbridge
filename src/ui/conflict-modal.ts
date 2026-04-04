@@ -33,6 +33,7 @@ export function showBatchConflictModal(
 class ConflictModal extends Modal {
   private conflict: ConflictInfo;
   private resolve: (resolution: ConflictResolution) => void;
+  private resolved = false;
 
   constructor(
     app: App,
@@ -78,26 +79,31 @@ class ConflictModal extends Modal {
           .setButtonText('Keep Local')
           .setCta()
           .onClick(() => {
-            this.close();
+            this.resolved = true;
             this.resolve('local');
+            this.close();
           }),
       )
       .addButton((btn) =>
         btn.setButtonText('Keep Remote').onClick(() => {
-          this.close();
+          this.resolved = true;
           this.resolve('remote');
+          this.close();
         }),
       )
       .addButton((btn) =>
         btn.setButtonText('Skip').onClick(() => {
-          this.close();
+          this.resolved = true;
           this.resolve('skip');
+          this.close();
         }),
       );
   }
 
   onClose(): void {
-    this.resolve('skip');
+    if (!this.resolved) {
+      this.resolve('skip');
+    }
   }
 }
 
@@ -105,6 +111,7 @@ class BatchConflictModal extends Modal {
   private conflicts: ConflictInfo[];
   private resolve: (resolutions: Map<number, ConflictResolution>) => void;
   private resolutions: Map<number, ConflictResolution>;
+  private resolved = false;
 
   constructor(
     app: App,
@@ -135,8 +142,9 @@ class BatchConflictModal extends Modal {
       for (const c of this.conflicts) {
         this.resolutions.set(c.bookstackId, 'local');
       }
-      this.close();
+      this.resolved = true;
       this.resolve(this.resolutions);
+      this.close();
     });
 
     const keepAllRemote = bulkRow.createEl('button', {
@@ -146,8 +154,9 @@ class BatchConflictModal extends Modal {
       for (const c of this.conflicts) {
         this.resolutions.set(c.bookstackId, 'remote');
       }
-      this.close();
+      this.resolved = true;
       this.resolve(this.resolutions);
+      this.close();
     });
 
     // Per-conflict choices
@@ -175,14 +184,17 @@ class BatchConflictModal extends Modal {
         .setButtonText('Apply')
         .setCta()
         .onClick(() => {
-          this.close();
+          this.resolved = true;
           this.resolve(this.resolutions);
+          this.close();
         }),
     );
   }
 
   onClose(): void {
-    this.resolve(this.resolutions);
+    if (!this.resolved) {
+      this.resolve(this.resolutions);
+    }
   }
 }
 

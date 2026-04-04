@@ -19,6 +19,8 @@ export function createTurndownService(context: ConversionContext): TurndownServi
 
   addCalloutRule(turndown);
   addCodeBlockRule(turndown);
+  addDetailsSummaryRule(turndown);
+  addLinkedImageRule(turndown);
   addInternalLinkRule(turndown, context);
   addDrawingRule(turndown, context);
   addComplexTableWarningRule(turndown);
@@ -46,7 +48,7 @@ export function htmlToMarkdown(html: string, context: ConversionContext): string
   }
 }
 
-/** BookStack Callouts → Obsidian Callouts */
+/** BookStack Callouts → Obsidian Callouts (or inline if inside a table) */
 function addCalloutRule(turndown: TurndownService): void {
   turndown.addRule('bookstack-callout', {
     filter: (node: HTMLElement) => {
@@ -59,11 +61,38 @@ function addCalloutRule(turndown: TurndownService): void {
     replacement: (content: string, node: Node) => {
       const el = node as HTMLElement;
       const type = getCalloutType(el);
-      const lines = content.trim().split('\n');
+      const text = content.trim();
+
+      // Inside a table cell: callout block syntax doesn't work, use inline badge
+      if (isInsideTable(el)) {
+        const emoji = calloutEmoji(type);
+        return text ? `${emoji} ${text}` : emoji;
+      }
+
+      const lines = text.split('\n');
       const body = lines.map((line) => `> ${line}`).join('\n');
       return `\n> [!${type}]\n${body}\n\n`;
     },
   });
+}
+
+function isInsideTable(node: HTMLElement): boolean {
+  let current: HTMLElement | null = node.parentElement;
+  while (current) {
+    if (current.nodeName === 'TD' || current.nodeName === 'TH') return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function calloutEmoji(type: string): string {
+  switch (type) {
+    case 'danger': return '🔴';
+    case 'warning': return '🟡';
+    case 'success': return '🟢';
+    case 'info': return '🔵';
+    default: return '🔵';
+  }
 }
 
 function hasCalloutType(node: HTMLElement): boolean {
@@ -109,6 +138,65 @@ function extractLanguage(codeEl: HTMLElement): string {
   const className = codeEl.getAttribute('class') || '';
   const match = className.match(/language-(\w+)/);
   return match ? match[1] : '';
+}
+
+/**
+ * Strip <a> wrappers around <img> tags.
+ * BookStack wraps images in links (often to the image itself).
+ * Without this rule, Turndown produces [![alt](src)](href) which is hard
+ * to rewrite reliably with regex. This rule outputs just ![alt](src).
+ */
+function addLinkedImageRule(turndown: TurndownService): void {
+  turndown.addRule('linked-image', {
+    filter: (node: HTMLElement) => {
+      if (node.nodeName !== 'A') return false;
+      const children = node.childNodes;
+      // Match <a> that contains exactly one <img> (possibly with whitespace text nodes)
+      let imgCount = 0;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.nodeType === 1 && (child as HTMLElement).nodeName === 'IMG') {
+          imgCount++;
+        } else if (child.nodeType === 3 && (child.textContent || '').trim() !== '') {
+          return false; // has meaningful text content besides the image
+        }
+      }
+      return imgCount === 1;
+    },
+    replacement: (_content: string, node: Node) => {
+      const el = node as HTMLElement;
+      const img = el.querySelector('img');
+      if (!img) return _content;
+
+      const src = img.getAttribute('src') || '';
+      const alt = img.getAttribute('alt') || '';
+      return `![${alt}](${src})`;
+    },
+  });
+}
+
+/** BookStack <details><summary> → Obsidian foldable callouts */
+function addDetailsSummaryRule(turndown: TurndownService): void {
+  turndown.addRule('details-summary', {
+    filter: (node: HTMLElement) => node.nodeName === 'DETAILS',
+    replacement: (content: string, node: Node) => {
+      const el = node as HTMLElement;
+      const summaryEl = el.querySelector('summary');
+      const title = summaryEl
+        ? (summaryEl.textContent || '').trim()
+        : 'Details';
+
+      // Turndown already converted the summary as plain text at the start
+      let body = content.trim();
+      if (body.startsWith(title)) {
+        body = body.substring(title.length).trim();
+      }
+
+      // Wrap in foldable callout (- = collapsed by default, like <details>)
+      const lines = body.split('\n').map((l) => `> ${l}`).join('\n');
+      return `\n> [!example]- ${title}\n${lines}\n\n`;
+    },
+  });
 }
 
 /** BookStack internal links → Obsidian wikilinks or full URLs */
