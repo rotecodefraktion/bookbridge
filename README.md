@@ -11,10 +11,20 @@ Obsidian community plugin for bidirectional sync between an Obsidian vault and a
 - **Delete Sync** — Detect deleted pages and sync after user confirmation
 - **Asset Download** — Save images and attachments locally, auto-rewrite URLs
 - **HTML→Markdown Conversion** — BookStack callouts, code blocks, tables, internal links
+- **Chapter Navigation** — Auto-generated index files and prev/next links
+- **Image Upload** — Push local images to BookStack with de-duplication
 - **Book Selection** — Sync individual or all books
 - **Auto-Sync** — Optional automatic sync at a configurable interval
 
 ## Installation
+
+### From GitHub Release
+
+1. Go to the [latest release](https://github.com/rotecodefraktion/bookbridge/releases/latest)
+2. Download `main.js`, `manifest.json` and `styles.css`
+3. Create the folder `{vault}/.obsidian/plugins/bookbridge/`
+4. Copy the three files into that folder
+5. Restart Obsidian and enable the plugin under *Settings → Community Plugins*
 
 ### Manual
 
@@ -52,7 +62,7 @@ Then copy `main.js`, `manifest.json` and `styles.css` into your plugin folder.
 | Sync Mode | Bidirectional | Pull only, Push only, or Bidirectional |
 | Conflict Strategy | Ask | Ask (show diff), Local wins, Remote wins |
 | Download Assets | On | Download images and attachments locally |
-| Asset Folder | `_assets` | Subfolder for downloaded assets |
+| Asset Folder | `Attachments` | Subfolder for downloaded assets |
 | Auto Sync | Off | Automatic sync |
 | Auto Sync Interval | 30 min | Interval between automatic syncs |
 | Book Selection | All | Choose which books to sync |
@@ -76,14 +86,17 @@ You can also trigger a sync via the **Ribbon Icon** (book icon in the sidebar).
 
 ```
 BookStack/
-├── _assets/
+├── Attachments/
 │   ├── gallery/          # Images
 │   └── attachments/      # PDFs and other attachments
 ├── Book A/
+│   ├── _index.md         # Book overview with links to chapters
 │   ├── Page 1.md
 │   └── Chapter X/
+│       ├── _index.md     # Chapter overview with links to pages
 │       └── Page 2.md
 └── Book B/
+    ├── _index.md
     └── Page 3.md
 ```
 
@@ -100,6 +113,16 @@ bookstack_book_id: 5
 bookstack_chapter_id: 12
 ---
 ```
+
+### Navigation
+
+Every synced page includes a navigation line linking to the parent chapter/book and prev/next pages:
+
+```
+↑ [[Chapter/_index|Chapter Name]] · ← [[Previous Page]] · → [[Next Page]]
+```
+
+Index files (`_index.md`) are generated for each book and chapter, providing a table of contents with wikilinks to all pages.
 
 ### Conflicts
 
@@ -132,9 +155,11 @@ Deleted pages are detected and presented to the user for confirmation — nothin
 
 ### Obsidian → BookStack (Markdown → HTML)
 
+- Full Markdown support via `marked` library (tables, footnotes, nested lists, etc.)
 - Obsidian callouts → BookStack callout classes
 - Wikilinks → BookStack internal links
 - Local images → BookStack Image Gallery URLs
+- Image upload — local images are uploaded to BookStack Image Gallery, with de-duplication
 
 ## Development
 

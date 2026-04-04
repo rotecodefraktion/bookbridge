@@ -1,6 +1,6 @@
 {
   "name": "obsidian-bookbridge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Bidirectional sync between Obsidian and BookStack",
   "main": "main.js",
   "scripts": {
