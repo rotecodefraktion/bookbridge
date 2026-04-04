@@ -1,6 +1,6 @@
 import { App, Notice, TFile, normalizePath } from 'obsidian';
 import { BookStackClient } from '../api/client';
-import { BookStackBook, BookStackBookContents } from '../api/types';
+import { BookStackBook, BookStackBookContents, BookStackImage } from '../api/types';
 import { markdownToHtml, ReverseConversionContext } from '../convert/md-to-html';
 import {
   MappingData,
@@ -531,6 +531,21 @@ async function uploadLocalImages(
 
   console.log(`BookBridge: Found ${localPaths.size} local images to upload`);
 
+  // Fetch existing images for this page to avoid duplicate uploads
+  let existingImages: BookStackImage[] = [];
+  try {
+    const response = await client.getImagesForPage(pageId);
+    existingImages = response.data;
+  } catch {
+    // If we can't fetch existing images, just upload everything
+  }
+
+  // Build lookup by name (lowercased)
+  const existingByName = new Map<string, BookStackImage>();
+  for (const img of existingImages) {
+    existingByName.set(img.name.toLowerCase(), img);
+  }
+
   for (const localPath of localPaths) {
     try {
       const normalizedPath = normalizePath(localPath);
@@ -540,8 +555,17 @@ async function uploadLocalImages(
         continue;
       }
 
-      const imageData = await app.vault.adapter.readBinary(normalizedPath);
       const filename = normalizedPath.split('/').pop() ?? 'image.png';
+
+      // Check if image already exists on the page
+      const existing = existingByName.get(filename.toLowerCase());
+      if (existing) {
+        console.log(`BookBridge: Image already exists, skipping upload: ${filename}`);
+        assetToUrl.set(localPath, existing.url);
+        continue;
+      }
+
+      const imageData = await app.vault.adapter.readBinary(normalizedPath);
 
       console.log(`BookBridge: Uploading image ${filename} to page ${pageId}`);
       const uploaded = await client.uploadImage(pageId, filename, imageData);
