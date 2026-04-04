@@ -33,6 +33,28 @@ interface PageInfo {
   chapterName: string | null;
   draft: boolean;
   updatedAt: string;
+  priority: number;
+}
+
+interface ChapterInfo {
+  id: number;
+  name: string;
+  bookId: number;
+  bookName: string;
+  priority: number;
+  pageIds: number[];
+}
+
+interface BookContentsInfo {
+  id: number;
+  name: string;
+  chapters: ChapterInfo[];
+  directPageIds: number[];
+}
+
+interface CollectResult {
+  pages: PageInfo[];
+  books: BookContentsInfo[];
 }
 
 export async function pullSync(
@@ -59,7 +81,7 @@ export async function pullSync(
 
   // Collect all pages from selected books
   setStatus('Loading book contents...');
-  const pages = await collectPages(client, selectedBooks);
+  const { pages, books: bookStructure } = await collectPages(client, selectedBooks);
 
   const mapping = await loadMapping(app.vault);
 
@@ -93,6 +115,9 @@ export async function pullSync(
 
   await saveMapping(app.vault, mapping);
 
+  setStatus('Generating index files...');
+  await generateIndexFiles(app, settings, pages, bookStructure);
+
   const summary = formatSyncSummary(result);
   console.log(`BookBridge: Pull complete — ${result.pulled} pulled, ${result.skipped} skipped, ${result.errors.length} errors`);
   new Notice(`BookBridge: Pull complete — ${summary}`);
@@ -103,14 +128,18 @@ export async function pullSync(
 async function collectPages(
   client: BookStackClient,
   books: BookStackBook[],
-): Promise<PageInfo[]> {
+): Promise<CollectResult> {
   const pages: PageInfo[] = [];
+  const bookInfos: BookContentsInfo[] = [];
 
   for (const book of books) {
     const contents = await client.getBookContents(book.id);
+    const chapters: ChapterInfo[] = [];
+    const directPageIds: number[] = [];
 
     for (const item of contents.contents) {
       if (item.type === 'page') {
+        directPageIds.push(item.id);
         pages.push({
           id: item.id,
           name: item.name,
@@ -121,9 +150,14 @@ async function collectPages(
           chapterName: null,
           draft: false,
           updatedAt: item.updated_at,
+          priority: item.priority,
         });
       } else if (item.type === 'chapter' && item.pages) {
-        for (const page of item.pages) {
+        const sortedPages = [...item.pages].sort((a, b) => a.priority - b.priority);
+        const chapterPageIds: number[] = [];
+
+        for (const page of sortedPages) {
+          chapterPageIds.push(page.id);
           pages.push({
             id: page.id,
             name: page.name,
@@ -134,13 +168,33 @@ async function collectPages(
             chapterName: item.name,
             draft: page.draft,
             updatedAt: page.updated_at,
+            priority: page.priority,
           });
         }
+
+        chapters.push({
+          id: item.id,
+          name: item.name,
+          bookId: book.id,
+          bookName: book.name,
+          priority: item.priority,
+          pageIds: chapterPageIds,
+        });
       }
     }
+
+    // Sort chapters by priority
+    chapters.sort((a, b) => a.priority - b.priority);
+
+    bookInfos.push({
+      id: book.id,
+      name: book.name,
+      chapters,
+      directPageIds,
+    });
   }
 
-  return pages;
+  return { pages, books: bookInfos };
 }
 
 async function pullPage(
@@ -302,6 +356,121 @@ async function createOrModify(app: App, vaultPath: string, content: string): Pro
     }
     throw error;
   }
+}
+
+async function generateIndexFiles(
+  app: App,
+  settings: BookBridgeSettings,
+  pages: PageInfo[],
+  bookStructure: BookContentsInfo[],
+): Promise<void> {
+  for (const book of bookStructure) {
+    const bookFolder = sanitizeFileName(book.name);
+    const bookIndexPath = normalizePath(
+      `${settings.syncFolder}/${bookFolder}/${bookFolder}.md`,
+    );
+
+    // Build book index content
+    const bookLines: string[] = [];
+    bookLines.push(`# ${book.name}`);
+    bookLines.push('');
+
+    if (book.chapters.length > 0) {
+      bookLines.push('## Kapitel');
+      bookLines.push('');
+      for (const chapter of book.chapters) {
+        const chapterSanitized = sanitizeFileName(chapter.name);
+        bookLines.push(`- [[${chapterSanitized}]]`);
+      }
+      bookLines.push('');
+    }
+
+    if (book.directPageIds.length > 0) {
+      bookLines.push('## Seiten');
+      bookLines.push('');
+      for (const pageId of book.directPageIds) {
+        const page = pages.find((p) => p.id === pageId);
+        if (page) {
+          const pageSanitized = sanitizeFileName(page.name);
+          bookLines.push(`- [[${pageSanitized}]]`);
+        }
+      }
+      bookLines.push('');
+    }
+
+    const bookContent = bookLines.join('\n');
+    const bookFolderPath = normalizePath(`${settings.syncFolder}/${bookFolder}`);
+    await ensureFolder(app, bookFolderPath);
+    await writeIndexFile(app, bookIndexPath, bookContent, 'book', book.id, book.id);
+
+    // Generate chapter index files
+    for (const chapter of book.chapters) {
+      const chapterFolder = sanitizeFileName(chapter.name);
+      const chapterIndexPath = normalizePath(
+        `${settings.syncFolder}/${bookFolder}/${chapterFolder}/${chapterFolder}.md`,
+      );
+
+      const chapterLines: string[] = [];
+      chapterLines.push(`# ${chapter.name}`);
+      chapterLines.push('');
+
+      for (const pageId of chapter.pageIds) {
+        const page = pages.find((p) => p.id === pageId);
+        if (page) {
+          const pageSanitized = sanitizeFileName(page.name);
+          chapterLines.push(`- [[${pageSanitized}]]`);
+        }
+      }
+      chapterLines.push('');
+
+      const chapterContent = chapterLines.join('\n');
+      const chapterFolderPath = normalizePath(
+        `${settings.syncFolder}/${bookFolder}/${chapterFolder}`,
+      );
+      await ensureFolder(app, chapterFolderPath);
+      await writeIndexFile(
+        app,
+        chapterIndexPath,
+        chapterContent,
+        'chapter',
+        chapter.id,
+        chapter.bookId,
+      );
+    }
+  }
+}
+
+async function writeIndexFile(
+  app: App,
+  path: string,
+  content: string,
+  type: 'book' | 'chapter',
+  id: number,
+  bookId: number,
+): Promise<void> {
+  // Build frontmatter manually (these are not tracked in mapping)
+  const fmLines = ['---'];
+  fmLines.push(`bookstack_type: ${type}`);
+  fmLines.push(`bookstack_id: ${id}`);
+  if (type === 'chapter') {
+    fmLines.push(`bookstack_book_id: ${bookId}`);
+  }
+  fmLines.push('---');
+  fmLines.push('');
+
+  const fullContent = fmLines.join('\n') + content;
+
+  // Only write if content changed
+  const exists = await app.vault.adapter.exists(path);
+  if (exists) {
+    const existing = await app.vault.adapter.read(path);
+    if (existing === fullContent) {
+      return;
+    }
+  }
+
+  await app.vault.adapter.write(path, fullContent);
+  console.log(`BookBridge: Generated index: ${path}`);
 }
 
 async function ensureFolder(app: App, path: string): Promise<void> {
