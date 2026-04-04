@@ -118,6 +118,9 @@ export async function pullSync(
   setStatus('Generating index files...');
   await generateIndexFiles(app, settings, pages, bookStructure);
 
+  setStatus('Injecting navigation...');
+  await injectNavigation(app, settings, pages, bookStructure);
+
   const summary = formatSyncSummary(result);
   console.log(`BookBridge: Pull complete — ${result.pulled} pulled, ${result.skipped} skipped, ${result.errors.length} errors`);
   new Notice(`BookBridge: Pull complete — ${summary}`);
@@ -471,6 +474,88 @@ async function writeIndexFile(
 
   await app.vault.adapter.write(path, fullContent);
   console.log(`BookBridge: Generated index: ${path}`);
+}
+
+async function injectNavigation(
+  app: App,
+  settings: BookBridgeSettings,
+  pages: PageInfo[],
+  bookStructure: BookContentsInfo[],
+): Promise<void> {
+  const pageMap = new Map<number, PageInfo>();
+  for (const page of pages) {
+    pageMap.set(page.id, page);
+  }
+
+  for (const book of bookStructure) {
+    // Direct pages in book
+    for (let i = 0; i < book.directPageIds.length; i++) {
+      const page = pageMap.get(book.directPageIds[i]);
+      if (!page) continue;
+      const prev = i > 0 ? pageMap.get(book.directPageIds[i - 1]) ?? null : null;
+      const next = i < book.directPageIds.length - 1 ? pageMap.get(book.directPageIds[i + 1]) ?? null : null;
+      await writeNavLine(app, settings, page, book.name, prev, next);
+    }
+
+    // Pages in chapters
+    for (const chapter of book.chapters) {
+      for (let i = 0; i < chapter.pageIds.length; i++) {
+        const page = pageMap.get(chapter.pageIds[i]);
+        if (!page) continue;
+        const prev = i > 0 ? pageMap.get(chapter.pageIds[i - 1]) ?? null : null;
+        const next = i < chapter.pageIds.length - 1 ? pageMap.get(chapter.pageIds[i + 1]) ?? null : null;
+        await writeNavLine(app, settings, page, chapter.name, prev, next);
+      }
+    }
+  }
+}
+
+async function writeNavLine(
+  app: App,
+  settings: BookBridgeSettings,
+  page: PageInfo,
+  parentName: string,
+  prev: PageInfo | null,
+  next: PageInfo | null,
+): Promise<void> {
+  const bookFolder = sanitizeFileName(page.bookName);
+  const chapterFolder = page.chapterName ? sanitizeFileName(page.chapterName) : null;
+  const pageName = sanitizeFileName(page.name);
+  const vaultPath = buildPagePath(settings.syncFolder, bookFolder, chapterFolder, pageName);
+  const normalizedPath = normalizePath(vaultPath);
+
+  const exists = await app.vault.adapter.exists(normalizedPath);
+  if (!exists) return;
+
+  const content = await app.vault.adapter.read(normalizedPath);
+
+  // Build nav line
+  const parentSanitized = sanitizeFileName(parentName);
+  let navLine = `↑ [[${parentSanitized}]]`;
+  if (prev) {
+    navLine += ` · ← [[${sanitizeFileName(prev.name)}]]`;
+  }
+  if (next) {
+    navLine += ` · → [[${sanitizeFileName(next.name)}]]`;
+  }
+
+  // Strip existing nav line (line starting with ↑ after frontmatter)
+  const stripped = content.replace(
+    /^(---\n[\s\S]*?\n---\n)↑ \[\[.*\n\n?/,
+    '$1',
+  );
+
+  // Inject new nav line after frontmatter
+  const injected = stripped.replace(
+    /^(---\n[\s\S]*?\n---\n)/,
+    `$1${navLine}\n\n`,
+  );
+
+  // Only write if content changed
+  if (injected === content) return;
+
+  await app.vault.adapter.write(normalizedPath, injected);
+  console.log(`BookBridge: Injected navigation: ${normalizedPath}`);
 }
 
 async function ensureFolder(app: App, path: string): Promise<void> {
