@@ -367,7 +367,6 @@ async function generateIndexFiles(
   pages: PageInfo[],
   bookStructure: BookContentsInfo[],
 ): Promise<void> {
-  // Build a page lookup by ID for collision checks
   const pageById = new Map<number, PageInfo>();
   for (const page of pages) {
     pageById.set(page.id, page);
@@ -376,36 +375,9 @@ async function generateIndexFiles(
   for (const book of bookStructure) {
     const bookFolder = sanitizeFileName(book.name);
 
-    // Check for naming collision between book index and direct pages or chapters
-    const bookHasCollision =
-      book.directPageIds.some((pid) => {
-        const p = pageById.get(pid);
-        return p !== undefined && sanitizeFileName(p.name) === bookFolder;
-      }) ||
-      book.chapters.some(
-        (ch) => sanitizeFileName(ch.name) === bookFolder,
-      );
-    const bookFileName = bookHasCollision
-      ? `${bookFolder} (Index)`
-      : bookFolder;
-
     const bookIndexPath = normalizePath(
-      `${settings.syncFolder}/${bookFolder}/${bookFileName}.md`,
+      `${settings.syncFolder}/${bookFolder}/_index.md`,
     );
-
-    // Pre-compute chapter file names (needed for book index wikilinks)
-    const chapterFileNames = new Map<number, string>();
-    for (const chapter of book.chapters) {
-      const chapterFolder = sanitizeFileName(chapter.name);
-      const chapterHasCollision = chapter.pageIds.some((pid) => {
-        const p = pageById.get(pid);
-        return p !== undefined && sanitizeFileName(p.name) === chapterFolder;
-      });
-      chapterFileNames.set(
-        chapter.id,
-        chapterHasCollision ? `${chapterFolder} (Index)` : chapterFolder,
-      );
-    }
 
     // Build book index content
     const bookLines: string[] = [];
@@ -416,8 +388,8 @@ async function generateIndexFiles(
       bookLines.push('## Kapitel');
       bookLines.push('');
       for (const chapter of book.chapters) {
-        const chapterLinkName = chapterFileNames.get(chapter.id) ?? sanitizeFileName(chapter.name);
-        bookLines.push(`- [[${chapterLinkName}]]`);
+        const chapterFolder = sanitizeFileName(chapter.name);
+        bookLines.push(`- [[${chapterFolder}/_index|${chapter.name}]]`);
       }
       bookLines.push('');
     }
@@ -443,9 +415,8 @@ async function generateIndexFiles(
     // Generate chapter index files
     for (const chapter of book.chapters) {
       const chapterFolder = sanitizeFileName(chapter.name);
-      const chapterFileName = chapterFileNames.get(chapter.id) ?? chapterFolder;
       const chapterIndexPath = normalizePath(
-        `${settings.syncFolder}/${bookFolder}/${chapterFolder}/${chapterFileName}.md`,
+        `${settings.syncFolder}/${bookFolder}/${chapterFolder}/_index.md`,
       );
 
       const chapterLines: string[] = [];
@@ -564,9 +535,9 @@ async function writeNavLine(
 
   const content = await app.vault.adapter.read(normalizedPath);
 
-  // Build nav line
-  const parentSanitized = sanitizeFileName(parentName);
-  let navLine = `↑ [[${parentSanitized}]]`;
+  // Build nav line — use path-based wikilink to disambiguate _index.md files
+  const parentFolder = chapterFolder ?? bookFolder;
+  let navLine = `↑ [[${parentFolder}/_index|${parentName}]]`;
   if (prev) {
     navLine += ` · ← [[${sanitizeFileName(prev.name)}]]`;
   }
