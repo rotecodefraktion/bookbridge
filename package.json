@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@joplin/turndown-plugin-gfm": "^1.0.64",
+    "marked": "^17.0.5",
     "turndown": "^7.2.3"
   }
 }
