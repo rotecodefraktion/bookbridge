@@ -187,6 +187,12 @@ export class BookStackClient {
     return this.request<BookStackImage>(`image-gallery/${id}`);
   }
 
+  async getImagesForPage(pageId: number): Promise<BookStackListResponse<BookStackImage>> {
+    return this.request<BookStackListResponse<BookStackImage>>(
+      `image-gallery?filter[uploaded_to]=${pageId}&count=500`,
+    );
+  }
+
   /**
    * Upload an image to the BookStack image gallery via multipart/form-data.
    * Manually constructs the multipart body since Obsidian doesn't have FormData.
@@ -266,20 +272,6 @@ export class BookStackClient {
     return this.request<BookStackAttachmentDetail>(`attachments/${id}`);
   }
 
-  /** Download attachment binary content directly as ArrayBuffer. */
-  async downloadAttachmentFile(id: number): Promise<ArrayBuffer> {
-    await this.rateLimit();
-
-    const response = await requestUrl({
-      url: `${this.baseUrl}/api/attachments/${id}`,
-      method: 'GET',
-      headers: {
-        Authorization: `Token ${this.tokenId}:${this.tokenSecret}`,
-      },
-    });
-
-    return response.arrayBuffer;
-  }
 }
 
 export class BookStackApiError extends Error {
