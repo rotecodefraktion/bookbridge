@@ -33,6 +33,7 @@ export interface BookStackBookContentItem {
   slug: string;
   type: 'chapter' | 'page';
   updated_at: string;
+  priority: number;
   /** Only present when type === 'chapter' */
   pages?: BookStackBookContentPage[];
 }
@@ -43,6 +44,7 @@ export interface BookStackBookContentPage {
   slug: string;
   draft: boolean;
   updated_at: string;
+  priority: number;
 }
 
 export interface BookStackChapter {
