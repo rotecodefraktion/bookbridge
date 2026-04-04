@@ -83,6 +83,10 @@ export async function bidirectionalSync(
 
   const localByBookstackId = new Map<number, { file: TFile; hash: string }>();
   for (const file of localFiles) {
+    const cache = app.metadataCache.getFileCache(file);
+    const rawFm = cache?.frontmatter;
+    if (rawFm?.bookstack_type === 'book' || rawFm?.bookstack_type === 'chapter') continue;
+
     const fm = readFrontmatter(app, file);
     if (!fm) continue;
 
@@ -100,6 +104,10 @@ export async function bidirectionalSync(
   // Step 2b: Detect new local files (no frontmatter, not in mapping)
   const newLocalItems: SyncItem[] = [];
   for (const file of localFiles) {
+    const cache2 = app.metadataCache.getFileCache(file);
+    const rawFm2 = cache2?.frontmatter;
+    if (rawFm2?.bookstack_type === 'book' || rawFm2?.bookstack_type === 'chapter') continue;
+
     const fm = readFrontmatter(app, file);
     if (fm) continue; // already handled above
 
