@@ -28,6 +28,7 @@ import {
   showBatchConflictModal,
 } from '../ui/conflict-modal';
 import { deleteSync } from './delete';
+import { log, debug } from '../utils/logger';
 
 interface SyncItem {
   bookstackId: number;
@@ -138,7 +139,7 @@ export async function bidirectionalSync(
   }
 
   if (newLocalItems.length > 0) {
-    console.log(`BookBridge: Bidirectional sync found ${newLocalItems.length} new local files`);
+    debug(`Bidirectional sync found ${newLocalItems.length} new local files`);
   }
 
   // Step 3: Determine sync actions
@@ -200,8 +201,8 @@ export async function bidirectionalSync(
   const deletedLocal = syncItems.filter((s) => s.state === 'deleted_local');
   const unchanged = syncItems.filter((s) => s.state === 'unchanged');
 
-  console.log(
-    `BookBridge: Bidirectional sync — ${unchanged.length} unchanged, ${toPull.length} pull, ${toPush.length} push, ${newLocal.length} new local, ${conflicts.length} conflicts`,
+  log(
+    `Bidirectional sync — ${unchanged.length} unchanged, ${toPull.length} pull, ${toPush.length} push, ${newLocal.length} new local, ${conflicts.length} conflicts`,
   );
 
   // Step 4: Handle conflicts

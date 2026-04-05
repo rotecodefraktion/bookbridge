@@ -33,6 +33,9 @@ export function markdownToHtml(
   // Convert markdown to HTML using basic rules
   html = convertBasicMarkdown(html);
 
+  // Security: strip dangerous tags for defense-in-depth
+  html = stripDangerousTags(html);
+
   return html;
 }
 
@@ -96,4 +99,15 @@ function convertLocalImages(
  */
 function convertBasicMarkdown(md: string): string {
   return marked.parse(md, { async: false }) as string;
+}
+
+/**
+ * Strip dangerous HTML tags (script, iframe, object, embed, form, input)
+ * for defense-in-depth. BookStack sanitizes server-side, but we prevent
+ * dangerous content from being generated in the first place.
+ */
+function stripDangerousTags(html: string): string {
+  return html
+    .replace(/<(script|iframe|object|embed|form|input)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|iframe|object|embed|form|input)[^>]*\/?>/gi, '');
 }

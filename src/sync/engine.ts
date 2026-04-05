@@ -1,18 +1,30 @@
 import { MappingEntry } from '../models/mapping';
 
 /**
- * Compute a simple hash of content for change detection.
- * Uses a basic string hash since we don't need cryptographic strength
- * and SubtleCrypto is async.
+ * DJB2 hash with configurable seed.
+ */
+function djb2(str: string, seed: number): number {
+  let hash = seed;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return hash;
+}
+
+/**
+ * Compute a 64-bit hash of content for change detection.
+ * Uses double-DJB2 with different seeds to produce a 16-char hex string,
+ * giving 64-bit collision resistance instead of 32-bit.
+ *
+ * NOTE: This changed from 8-char (32-bit) to 16-char (64-bit) output.
+ * Existing mapping entries with old 8-char hashes will mismatch on first
+ * comparison, triggering a one-time re-sync. This is acceptable behavior.
  */
 export function computeHash(content: string): string {
-  let hash = 0;
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  // Convert to unsigned hex string
-  return (hash >>> 0).toString(16).padStart(8, '0');
+  const h1 = djb2(content, 5381);
+  const h2 = djb2(content, 2166136261);
+  return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
 }
 
 export type ChangeState =

@@ -152,15 +152,49 @@ export class BookStackClient {
   async getPageExportHtml(id: number): Promise<string> {
     await this.rateLimit();
 
-    const response = await requestUrl({
-      url: `${this.baseUrl}/api/pages/${id}/export/html`,
-      method: 'GET',
-      headers: {
-        Authorization: `Token ${this.tokenId}:${this.tokenSecret}`,
-      },
-    });
+    let lastError: Error | undefined;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await requestUrl({
+          url: `${this.baseUrl}/api/pages/${id}/export/html`,
+          method: 'GET',
+          headers: {
+            Authorization: `Token ${this.tokenId}:${this.tokenSecret}`,
+          },
+          throw: false,
+        });
 
-    return response.text;
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const delay = BASE_RETRY_DELAY * Math.pow(2, attempt);
+          await this.sleep(delay);
+          continue;
+        }
+        if (response.status === 401) {
+          throw new BookStackAuthError('Authentication failed. Check your API token.');
+        }
+        if (response.status === 404) {
+          throw new BookStackNotFoundError(`Page not found: ${id}`);
+        }
+        if (response.status >= 400) {
+          throw new BookStackApiError(`HTTP ${response.status}`, response.status);
+        }
+        return response.text;
+      } catch (error) {
+        if (
+          error instanceof BookStackAuthError ||
+          error instanceof BookStackNotFoundError ||
+          error instanceof BookStackApiError
+        ) {
+          throw error;
+        }
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < MAX_RETRIES) {
+          await this.sleep(BASE_RETRY_DELAY * Math.pow(2, attempt));
+          continue;
+        }
+      }
+    }
+    throw lastError ?? new Error('Request failed after retries');
   }
 
   async createPage(data: {
@@ -204,13 +238,18 @@ export class BookStackClient {
   ): Promise<BookStackImage> {
     await this.rateLimit();
 
+    // Sanitize filename for multipart header safety
+    const safeName = name
+      .replace(/["\r\n]/g, '')  // Remove chars that break multipart headers
+      .replace(/[^\x20-\x7E]/g, '_');  // Replace non-ASCII with underscore
+
     const boundary = '----BookBridge' + Date.now();
     const encoder = new TextEncoder();
 
     const textFields: Array<{ name: string; value: string }> = [
       { name: 'uploaded_to', value: String(pageId) },
       { name: 'type', value: 'gallery' },
-      { name: 'name', value: name },
+      { name: 'name', value: safeName },
     ];
 
     const parts: Uint8Array[] = [];
@@ -222,8 +261,8 @@ export class BookStackClient {
     }
 
     // Add binary image field
-    const mimeType = guessMimeType(name);
-    const imageHeader = `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${name}"\r\nContent-Type: ${mimeType}\r\n\r\n`;
+    const mimeType = guessMimeType(safeName);
+    const imageHeader = `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${safeName}"\r\nContent-Type: ${mimeType}\r\n\r\n`;
     parts.push(encoder.encode(imageHeader));
     parts.push(new Uint8Array(imageData));
     parts.push(encoder.encode('\r\n'));

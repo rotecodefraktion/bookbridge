@@ -49,13 +49,18 @@ export function makeUnique(name: string, existing: Set<string>): string {
 
 /**
  * Sanitize a path for use in asset downloads.
- * Prevents path traversal attacks.
+ * Prevents path traversal attacks by extracting the basename
+ * and rejecting directory traversal names.
  */
 export function sanitizeAssetPath(filename: string): string {
-  // Remove path traversal
-  let sanitized = filename.replace(/\.\./g, '').replace(/^[/\\]+/, '');
-  // Extract just the filename part
+  // Remove leading slashes
+  let sanitized = filename.replace(/^[/\\]+/, '');
+  // Extract just the filename part (basename)
   const parts = sanitized.split(/[/\\]/);
   sanitized = parts[parts.length - 1] || 'file';
+  // Reject directory traversal names
+  if (sanitized === '.' || sanitized === '..') {
+    sanitized = 'file';
+  }
   return sanitizeFileName(sanitized);
 }

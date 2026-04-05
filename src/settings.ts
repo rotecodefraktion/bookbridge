@@ -18,6 +18,7 @@ export interface BookBridgeSettings {
   autoSync: boolean;
   autoSyncInterval: number;
   selectedBookIds: number[];
+  debug: boolean;
 }
 
 export const DEFAULT_SETTINGS: BookBridgeSettings = {
@@ -32,6 +33,7 @@ export const DEFAULT_SETTINGS: BookBridgeSettings = {
   autoSync: false,
   autoSyncInterval: 30,
   selectedBookIds: [],
+  debug: false,
 };
 
 export class BookBridgeSettingTab extends PluginSettingTab {
@@ -206,6 +208,21 @@ export class BookBridgeSettingTab extends PluginSettingTab {
               await this.plugin.saveSettings();
               this.plugin.configureAutoSync();
             }
+          }),
+      );
+
+    // --- Developer ---
+    containerEl.createEl('h3', { text: 'Developer' });
+
+    new Setting(containerEl)
+      .setName('Debug Logging')
+      .setDesc('Enable verbose debug logging to the developer console')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.debug)
+          .onChange(async (value) => {
+            this.plugin.settings.debug = value;
+            await this.plugin.saveSettings();
           }),
       );
 
