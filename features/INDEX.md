@@ -10,3 +10,4 @@
 | FE-6 | [Bidirektionaler Sync & Conflict Resolution](FE-6-bidirectional-sync.md) | planned | FE-2, FE-5 |
 | FE-7 | [Delete Sync](FE-7-delete-sync.md) | planned | FE-6 |
 | FE-8 | [Kapitel-Index-Dateien](FE-8-chapter-index.md) | planned | FE-2, FE-5 |
+| FE-9 | [YouTube Video Einbindung](FE-9-youtube-embed.md) | planned | FE-3, FE-5 |
