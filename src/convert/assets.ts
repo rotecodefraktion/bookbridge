@@ -44,6 +44,13 @@ export async function downloadImages(
       // Normalize BookStack image URLs to use configured baseUrl
       // (HTML may contain old/different host:port combinations)
       const downloadUrl = normalizeBookStackUrl(originalUrl, baseUrl);
+
+      // Security: only download from configured BookStack instance
+      if (!downloadUrl.startsWith(baseUrl)) {
+        console.warn(`BookBridge: Skipping external image URL: ${originalUrl}`);
+        continue;
+      }
+
       const response = await requestUrl({ url: downloadUrl });
       await vault.createBinary(localPath, response.arrayBuffer);
       urlMap.set(originalUrl, relativePath);

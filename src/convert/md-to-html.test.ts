@@ -66,4 +66,31 @@ describe('markdownToHtml', () => {
     expect(markdownToHtml('', defaultContext)).toBe('');
     expect(markdownToHtml('   ', defaultContext)).toBe('');
   });
+
+  describe('XSS prevention', () => {
+    it('strips script tags from output', () => {
+      const md = 'Hello <script>alert("xss")</script> world';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).not.toContain('<script');
+      expect(result).not.toContain('alert');
+    });
+
+    it('strips iframe tags from output', () => {
+      const md = 'Hello <iframe src="https://evil.com"></iframe> world';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).not.toContain('<iframe');
+    });
+
+    it('strips self-closing dangerous tags', () => {
+      const md = 'Hello <embed src="evil.swf"/> world';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).not.toContain('<embed');
+    });
+
+    it('strips object tags from output', () => {
+      const md = 'Hello <object data="evil.swf"></object> world';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).not.toContain('<object');
+    });
+  });
 });
