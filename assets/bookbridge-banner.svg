@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="627" viewBox="0 0 1200 627">
+  <defs>
+    <linearGradient id="bg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8f9fa"/>
+      <stop offset="100%" style="stop-color:#e9ecef"/>
+    </linearGradient>
+    <linearGradient id="accent1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e82121"/>
+      <stop offset="50%" style="stop-color:#c41a1a"/>
+      <stop offset="100%" style="stop-color:#e82121"/>
+    </linearGradient>
+    <linearGradient id="accentFade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e82121;stop-opacity:0.1"/>
+      <stop offset="50%" style="stop-color:#e82121;stop-opacity:0.2"/>
+      <stop offset="100%" style="stop-color:#e82121;stop-opacity:0.1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="627" fill="url(#bg1)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.035">
+    <line x1="60" y1="0" x2="60" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="120" y1="0" x2="120" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="180" y1="0" x2="180" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="240" y1="0" x2="240" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="300" y1="0" x2="300" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="360" y1="0" x2="360" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="420" y1="0" x2="420" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="480" y1="0" x2="480" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="540" y1="0" x2="540" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="660" y1="0" x2="660" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="720" y1="0" x2="720" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="780" y1="0" x2="780" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="840" y1="0" x2="840" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="900" y1="0" x2="900" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="960" y1="0" x2="960" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="1020" y1="0" x2="1020" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="1080" y1="0" x2="1080" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="1140" y1="0" x2="1140" y2="627" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="60" x2="1200" y2="60" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="120" x2="1200" y2="120" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="180" x2="1200" y2="180" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="240" x2="1200" y2="240" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="360" x2="1200" y2="360" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="420" x2="1200" y2="420" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="480" x2="1200" y2="480" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="540" x2="1200" y2="540" stroke="#000" stroke-width="1"/>
+  </g>
+
+  <!-- Left side: Official Obsidian Logo -->
+  <g transform="translate(230, 230)">
+    <!-- Circle background -->
+    <circle cx="50" cy="50" r="62" fill="#e82121" opacity="0.06"/>
+    <circle cx="50" cy="50" r="62" fill="none" stroke="#e82121" stroke-width="1" opacity="0.15"/>
+    <!-- Obsidian logo scaled up (original viewBox 0 0 24 24, scale ~4.2x) -->
+    <g transform="translate(0, 0) scale(4.2)">
+      <path d="M15.074 0C12.586 1.374 10.1 2.749 7.613 4.124l.823 4.266 6.365-5.015zm.172.059l-.269 3.314 4.497 2.752zm-.353 3.466L8.487 8.576l7.39 15.367 1.177-2.359L19.58 6.4c-.012-.009-4.688-2.875-4.688-2.875zm-7.425.779l-3.05 6.594L9.033 21.51l-.74-12.934-.012-.064zm1.025 4.688l.73 12.784L15.71 24Z" fill="#1a1a2e"/>
+    </g>
+    <!-- Label -->
+    <text x="50" y="125" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="14" font-weight="500" fill="#6b7280" text-anchor="middle" letter-spacing="2">OBSIDIAN</text>
+  </g>
+
+  <!-- Bridge connection -->
+  <g>
+    <!-- Bridge arc -->
+    <path d="M 380 290 Q 600 175 820 290" fill="none" stroke="#e82121" stroke-width="2.5" stroke-dasharray="8,4" opacity="0.5"/>
+    <path d="M 385 310 Q 600 200 815 310" fill="none" stroke="#e82121" stroke-width="1.2" opacity="0.2"/>
+    <path d="M 390 330 Q 600 225 810 330" fill="none" stroke="#e82121" stroke-width="0.8" opacity="0.1"/>
+
+    <!-- Bridge pillars -->
+    <line x1="470" y1="250" x2="470" y2="340" stroke="#e82121" stroke-width="1.2" opacity="0.2"/>
+    <line x1="600" y1="210" x2="600" y2="340" stroke="#e82121" stroke-width="1.2" opacity="0.25"/>
+    <line x1="730" y1="250" x2="730" y2="340" stroke="#e82121" stroke-width="1.2" opacity="0.2"/>
+
+    <!-- Bridge base line -->
+    <line x1="380" y1="340" x2="820" y2="340" stroke="#e82121" stroke-width="1" opacity="0.12"/>
+
+    <!-- Bidirectional arrows -->
+    <g transform="translate(600, 255)">
+      <polygon points="-28,0 -16,-7 -16,7" fill="#e82121" opacity="0.45"/>
+      <polygon points="28,0 16,-7 16,7" fill="#e82121" opacity="0.45"/>
+      <line x1="-13" y1="0" x2="13" y2="0" stroke="#e82121" stroke-width="1.5" opacity="0.35"/>
+    </g>
+  </g>
+
+  <!-- Right side: Official BookStack Logo -->
+  <g transform="translate(850, 225)">
+    <!-- Circle background -->
+    <circle cx="55" cy="55" r="62" fill="#e82121" opacity="0.06"/>
+    <circle cx="55" cy="55" r="62" fill="none" stroke="#e82121" stroke-width="1" opacity="0.15"/>
+    <!-- BookStack logo scaled up (original viewBox 0 0 24 24, scale ~4.2x) -->
+    <g transform="translate(5, 5) scale(4.2)">
+      <path d="M.3013 17.6146c-.1299-.3387-.5228-1.5119-.1337-2.4314l9.8273 5.6738a.329.329 0 0 0 .3299 0L24 12.9616v2.3542l-13.8401 7.9906-9.8586-5.6918zM.1911 8.9628c-.2882.8769.0149 2.0581.1236 2.4261l9.8452 5.6841L24 9.0823V6.7275L10.3248 14.623a.329.329 0 0 1-.3299 0L.1911 8.9628zm13.1698-1.9361c-.1819.1113-.4394.0015-.4852-.2064l-.2805-1.1336-2.1254-.1752a.33.33 0 0 1-.1378-.6145l5.5782-3.2207-1.7021-.9826L.6979 8.4935l9.462 5.463 13.5104-7.8004-4.401-2.5407-5.9084 3.4113zm-.1821-1.7286.2321.938 5.1984-3.0014-2.0395-1.1775-4.994 2.8834 1.3099.108a.3302.3302 0 0 1 .2931.2495zM24 9.845l-13.6752 7.8954a.329.329 0 0 1-.3299 0L.1678 12.0667c-.3891.919.003 2.0914.1332 2.4311l9.8589 5.692L24 12.1993V9.845z" fill="#1a1a2e"/>
+    </g>
+    <!-- Label -->
+    <text x="55" y="130" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="14" font-weight="500" fill="#6b7280" text-anchor="middle" letter-spacing="2">BOOKSTACK</text>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="445" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="300" fill="#1a1a2e" text-anchor="middle" letter-spacing="-1">
+    BookBridge
+  </text>
+
+  <!-- Accent line under title -->
+  <rect x="530" y="460" width="140" height="2.5" rx="1.25" fill="url(#accent1)" opacity="0.7"/>
+
+  <!-- Subtitle -->
+  <text x="600" y="498" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400" fill="#6b7280" text-anchor="middle" letter-spacing="3">
+    OBSIDIAN  ⟷  BOOKSTACK
+  </text>
+
+  <!-- Plugin badge -->
+  <g transform="translate(600, 555)">
+    <rect x="-95" y="-13" width="190" height="26" rx="13" fill="none" stroke="#d1d5db" stroke-width="1"/>
+    <text x="0" y="4" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="10" fill="#9ca3af" text-anchor="middle" letter-spacing="2">COMMUNITY PLUGIN</text>
+  </g>
+
+  <!-- Bottom accent bar -->
+  <rect x="0" y="619" width="1200" height="8" fill="url(#accent1)" opacity="0.8"/>
+</svg>

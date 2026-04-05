@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/bookbridge-banner.svg" alt="BookBridge – Obsidian ⟷ BookStack Sync" width="100%">
+</p>
+
 # BookBridge
 
 Obsidian community plugin for bidirectional sync between an Obsidian vault and a [BookStack](https://www.bookstackapp.com/) instance.
