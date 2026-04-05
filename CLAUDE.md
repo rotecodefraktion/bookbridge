@@ -68,7 +68,6 @@ Feature-Specs in `features/FE-X-name.md`, Bug-Reports in `bugs/BUG-X-name.md`.
 - **Keine Node.js-only Module:** Plugin muss in Desktop UND Mobile laufen
 - **Human-in-the-loop:** Alle Workflows haben User-Approval-Checkpoints
 - **BookStack API Docs:** https://demo.bookstackapp.com/api/docs
-- **NoteStack Referenz:** https://github.com/john-ee/notestack
 
 ## Häufige Befehle
 
