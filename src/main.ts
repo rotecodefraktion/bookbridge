@@ -5,6 +5,7 @@ import { BookStackBook } from './api/types';
 import { pullSync } from './sync/pull';
 import { pushSync } from './sync/push';
 import { bidirectionalSync } from './sync/bidirectional';
+import { showHttpWarningModal } from './ui/http-warning-modal';
 
 class BookSuggestModal extends SuggestModal<BookStackBook> {
   private books: BookStackBook[];
@@ -124,13 +125,32 @@ export default class BookBridgePlugin extends Plugin {
     }
   }
 
-  createClient(): BookStackClient | null {
+  async createClient(): Promise<BookStackClient | null> {
     const { baseUrl, tokenId, tokenSecret } = this.settings;
     if (!baseUrl || !tokenId || !tokenSecret) {
       new Notice('BookBridge: Please configure connection in settings');
       return null;
     }
+
+    // Security: warn about HTTP connections (except localhost)
+    if (baseUrl.startsWith('http://') && !this.isLocalUrl(baseUrl)) {
+      const confirmed = await showHttpWarningModal(this.app);
+      if (!confirmed) {
+        new Notice('BookBridge: Connection cancelled — use HTTPS for secure connections');
+        return null;
+      }
+    }
+
     return new BookStackClient(baseUrl, tokenId, tokenSecret);
+  }
+
+  private isLocalUrl(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname;
+      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.local');
+    } catch {
+      return false;
+    }
   }
 
   configureAutoSync(): void {
@@ -155,7 +175,7 @@ export default class BookBridgePlugin extends Plugin {
   private async showBookSelector(
     onSelect: (book: BookStackBook) => void,
   ): Promise<void> {
-    const client = this.createClient();
+    const client = await this.createClient();
     if (!client) return;
 
     try {
@@ -172,7 +192,7 @@ export default class BookBridgePlugin extends Plugin {
       return;
     }
 
-    const client = this.createClient();
+    const client = await this.createClient();
     if (!client) return;
 
     this.isSyncing = true;
@@ -199,7 +219,7 @@ export default class BookBridgePlugin extends Plugin {
       return;
     }
 
-    const client = this.createClient();
+    const client = await this.createClient();
     if (!client) return;
 
     this.isSyncing = true;
@@ -227,7 +247,7 @@ export default class BookBridgePlugin extends Plugin {
         return;
       }
 
-      const client = this.createClient();
+      const client = await this.createClient();
       if (!client) return;
 
       this.isSyncing = true;
@@ -256,7 +276,7 @@ export default class BookBridgePlugin extends Plugin {
       return;
     }
 
-    const client = this.createClient();
+    const client = await this.createClient();
     if (!client) return;
 
     this.isSyncing = true;
@@ -284,7 +304,7 @@ export default class BookBridgePlugin extends Plugin {
         return;
       }
 
-      const client = this.createClient();
+      const client = await this.createClient();
       if (!client) return;
 
       this.isSyncing = true;
@@ -314,7 +334,7 @@ export default class BookBridgePlugin extends Plugin {
         return;
       }
 
-      const client = this.createClient();
+      const client = await this.createClient();
       if (!client) return;
 
       this.isSyncing = true;
