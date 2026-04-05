@@ -21,6 +21,3 @@ data.json
 .env
 .env.*
 
-# Claude Code
-.claude/
-CLAUDE.md
