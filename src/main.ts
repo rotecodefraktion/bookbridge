@@ -6,6 +6,7 @@ import { pullSync } from './sync/pull';
 import { pushSync } from './sync/push';
 import { bidirectionalSync } from './sync/bidirectional';
 import { showHttpWarningModal } from './ui/http-warning-modal';
+import { setDebugMode } from './utils/logger';
 
 class BookSuggestModal extends SuggestModal<BookStackBook> {
   private books: BookStackBook[];
@@ -46,6 +47,7 @@ export default class BookBridgePlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    setDebugMode(this.settings.debug);
 
     this.addSettingTab(new BookBridgeSettingTab(this.app, this));
 
@@ -117,6 +119,7 @@ export default class BookBridgePlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    setDebugMode(this.settings.debug);
   }
 
   setStatus(text: string): void {

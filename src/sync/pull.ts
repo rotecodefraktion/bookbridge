@@ -22,6 +22,7 @@ import {
   formatSyncSummary,
 } from './engine';
 import { BookBridgeSettings } from '../settings';
+import { log, debug } from '../utils/logger';
 
 interface PageInfo {
   id: number;
@@ -99,7 +100,7 @@ export async function pullSync(
   const total = pages.length;
   let processed = 0;
 
-  console.log(`BookBridge: Pull starting, ${selectedBooks.length} books, ${total} pages`);
+  log(`Pull starting, ${selectedBooks.length} books, ${total} pages`);
 
   for (const page of pages) {
     processed++;
@@ -122,7 +123,7 @@ export async function pullSync(
   await injectNavigation(app, settings, pages, bookStructure);
 
   const summary = formatSyncSummary(result);
-  console.log(`BookBridge: Pull complete — ${result.pulled} pulled, ${result.skipped} skipped, ${result.errors.length} errors`);
+  log(`Pull complete — ${result.pulled} pulled, ${result.skipped} skipped, ${result.errors.length} errors`);
   new Notice(`BookBridge: Pull complete — ${summary}`);
 
   return result;
@@ -214,13 +215,13 @@ async function pullPage(
 
   if (existing && existing.bookstackUpdatedAt === page.updatedAt) {
     // No changes on remote side — skip without fetching full page
-    console.log(`BookBridge: Skipping unchanged page: ${page.name}`);
+    debug(`Skipping unchanged page: ${page.name}`);
     result.skipped++;
     return;
   }
 
   // Fetch full page details only when page actually needs updating
-  console.log(`BookBridge: Pulling page: ${page.name}`);
+  debug(`Pulling page: ${page.name}`);
   const fullPage = await client.getPage(page.id);
 
   // Get HTML content for conversion
@@ -479,7 +480,7 @@ async function writeIndexFile(
   }
 
   await app.vault.adapter.write(path, fullContent);
-  console.log(`BookBridge: Generated index: ${path}`);
+  debug(`Generated index: ${path}`);
 }
 
 async function injectNavigation(
@@ -561,7 +562,7 @@ async function writeNavLine(
   if (injected === content) return;
 
   await app.vault.adapter.write(normalizedPath, injected);
-  console.log(`BookBridge: Injected navigation: ${normalizedPath}`);
+  debug(`Injected navigation: ${normalizedPath}`);
 }
 
 async function ensureFolder(app: App, path: string): Promise<void> {
