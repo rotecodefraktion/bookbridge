@@ -67,6 +67,36 @@ describe('markdownToHtml', () => {
     expect(markdownToHtml('   ', defaultContext)).toBe('');
   });
 
+  describe('YouTube embed', () => {
+    it('converts YouTube thumbnail link to iframe', () => {
+      const md = '[![YouTube](https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=dQw4w9WgXcQ)';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).toContain('youtube.com/embed/dQw4w9WgXcQ');
+      expect(result).toContain('<iframe');
+    });
+
+    it('converts bare YouTube URL to iframe', () => {
+      const md = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).toContain('youtube.com/embed/dQw4w9WgXcQ');
+      expect(result).toContain('<iframe');
+    });
+
+    it('converts youtu.be short URL to iframe', () => {
+      const md = 'https://youtu.be/dQw4w9WgXcQ';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).toContain('youtube.com/embed/dQw4w9WgXcQ');
+      expect(result).toContain('<iframe');
+    });
+
+    it('preserves YouTube iframes in stripDangerousTags', () => {
+      const md = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="560" height="315"></iframe>';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).toContain('<iframe');
+      expect(result).toContain('youtube.com/embed/dQw4w9WgXcQ');
+    });
+  });
+
   describe('XSS prevention', () => {
     it('strips script tags from output', () => {
       const md = 'Hello <script>alert("xss")</script> world';
@@ -91,6 +121,15 @@ describe('markdownToHtml', () => {
       const md = 'Hello <object data="evil.swf"></object> world';
       const result = markdownToHtml(md, defaultContext);
       expect(result).not.toContain('<object');
+    });
+  });
+
+  describe('draw.io diagrams', () => {
+    it('converts draw.io thumbnail to HTML comment on push', () => {
+      const md = '[![draw.io: diagram](BookStack/Attachments/gallery/drawing.png)](http://bookstack.local:6875/link/281)';
+      const result = markdownToHtml(md, defaultContext);
+      expect(result).toContain('<!-- BookBridge: draw.io diagram 281 preserved -->');
+      expect(result).not.toContain('draw.io:');
     });
   });
 });

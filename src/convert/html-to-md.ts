@@ -17,6 +17,7 @@ export function createTurndownService(context: ConversionContext): TurndownServi
 
   turndown.use(gfm);
 
+  addYouTubeRule(turndown);
   addCalloutRule(turndown);
   addCodeBlockRule(turndown);
   addDetailsSummaryRule(turndown);
@@ -46,6 +47,24 @@ export function htmlToMarkdown(html: string, context: ConversionContext): string
       '```',
     ].join('\n');
   }
+}
+
+/** YouTube iframes → Markdown thumbnail links */
+function addYouTubeRule(turndown: TurndownService): void {
+  turndown.addRule('youtube-embed', {
+    filter: (node: HTMLElement) => {
+      if (node.nodeName !== 'IFRAME') return false;
+      const src = node.getAttribute('src') || '';
+      return /youtube\.com\/embed\/|youtube-nocookie\.com\/embed\//.test(src);
+    },
+    replacement: (_content: string, node: Node) => {
+      const el = node as HTMLElement;
+      const src = el.getAttribute('src') || '';
+      const videoId = src.match(/embed\/([^?&#]+)/)?.[1];
+      if (!videoId) return '';
+      return `\n[![YouTube](https://img.youtube.com/vi/${videoId}/maxresdefault.jpg)](https://www.youtube.com/watch?v=${videoId})\n`;
+    },
+  });
 }
 
 /** BookStack Callouts → Obsidian Callouts (or inline if inside a table) */
@@ -246,7 +265,7 @@ function extractPageSlug(href: string): string | null {
   return match ? match[1] : null;
 }
 
-/** BookStack Drawings → Placeholder with link */
+/** BookStack Drawings → Clickable PNG thumbnail with edit link */
 function addDrawingRule(
   turndown: TurndownService,
   context: ConversionContext,
@@ -262,18 +281,21 @@ function addDrawingRule(
     replacement: (_content: string, node: Node) => {
       const el = node as HTMLElement;
       const drawingId = el.getAttribute('drawio-diagram') || '';
-      const link = drawingId
+      const img = el.querySelector('img');
+      const imgSrc = img ? (img.getAttribute('src') || '') : '';
+      const imgAlt = img ? (img.getAttribute('alt') || 'draw.io diagram') : 'draw.io diagram';
+
+      const editLink = drawingId
         ? `${context.baseUrl}/link/${drawingId}`
         : context.baseUrl;
 
-      return [
-        '',
-        '> [!warning] BookStack Drawing',
-        '> Dieses Element ist ein BookStack Drawing und kann nicht als Markdown dargestellt werden.',
-        `> [Original ansehen](${link})`,
-        '',
-        '',
-      ].join('\n');
+      if (imgSrc) {
+        // Clickable PNG preview with link to BookStack editor
+        return `\n[![draw.io: ${imgAlt}](${imgSrc})](${editLink})\n`;
+      }
+
+      // Fallback: no image available
+      return `\n[draw.io Zeichnung bearbeiten](${editLink})\n`;
     },
   });
 }

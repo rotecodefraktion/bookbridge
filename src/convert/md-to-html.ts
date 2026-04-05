@@ -30,6 +30,12 @@ export function markdownToHtml(
   // Pre-process: Local image paths → BookStack URLs
   html = convertLocalImages(html, context);
 
+  // Pre-process: draw.io thumbnail links → HTML comments (preserve drawings)
+  html = convertDrawioLinks(html);
+
+  // Pre-process: YouTube thumbnail links and bare URLs → iframes
+  html = convertYouTubeLinks(html);
+
   // Convert markdown to HTML using basic rules
   html = convertBasicMarkdown(html);
 
@@ -92,6 +98,38 @@ function convertLocalImages(
   );
 }
 
+/** draw.io thumbnail links → HTML comments (preserve drawings in BookStack) */
+function convertDrawioLinks(md: string): string {
+  // [![draw.io: alt](local-path)](baseUrl/link/ID) → HTML comment
+  const drawioRegex = /\[!\[draw\.io: ([^\]]*)\]\([^)]+\)\]\(([^)]*\/link\/(\d+))\)/g;
+  return md.replace(drawioRegex, (_match, _alt: string, _link: string, id: string) => {
+    return `<!-- BookBridge: draw.io diagram ${id} preserved -->`;
+  });
+}
+
+/** YouTube thumbnail links and bare URLs → iframe embeds */
+function convertYouTubeLinks(md: string): string {
+  // Convert thumbnail links: [![YouTube](thumbnail)](youtube-url) → iframe
+  md = md.replace(
+    /\[!\[YouTube\]\(https:\/\/img\.youtube\.com\/vi\/([^/]+)\/[^)]+\)\]\(https:\/\/www\.youtube\.com\/watch\?v=\1\)/g,
+    '<iframe src="https://www.youtube.com/embed/$1" width="560" height="315" frameborder="0" allowfullscreen></iframe>',
+  );
+
+  // Convert bare YouTube URLs on their own line → iframe
+  md = md.replace(
+    /^(https:\/\/(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]+).*)$/gm,
+    '<iframe src="https://www.youtube.com/embed/$2" width="560" height="315" frameborder="0" allowfullscreen></iframe>',
+  );
+
+  // Convert youtu.be short URLs on their own line → iframe
+  md = md.replace(
+    /^(https:\/\/youtu\.be\/([a-zA-Z0-9_-]+).*)$/gm,
+    '<iframe src="https://www.youtube.com/embed/$2" width="560" height="315" frameborder="0" allowfullscreen></iframe>',
+  );
+
+  return md;
+}
+
 /**
  * Convert Markdown to HTML using the marked library.
  * Replaces the previous regex-based approach for robust handling of
@@ -105,9 +143,28 @@ function convertBasicMarkdown(md: string): string {
  * Strip dangerous HTML tags (script, iframe, object, embed, form, input)
  * for defense-in-depth. BookStack sanitizes server-side, but we prevent
  * dangerous content from being generated in the first place.
+ * YouTube iframes are preserved as they are safe embedded content.
  */
 function stripDangerousTags(html: string): string {
-  return html
+  // Protect YouTube iframes by replacing them with placeholders
+  const youtubeIframes: string[] = [];
+  let result = html.replace(
+    /<iframe[^>]+src="https:\/\/(?:www\.)?(?:youtube\.com|youtube-nocookie\.com)\/embed\/[^"]*"[^>]*>[\s\S]*?<\/iframe>/gi,
+    (match) => {
+      youtubeIframes.push(match);
+      return `__YOUTUBE_IFRAME_${youtubeIframes.length - 1}__`;
+    },
+  );
+
+  // Strip dangerous tags
+  result = result
     .replace(/<(script|iframe|object|embed|form|input)[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<(script|iframe|object|embed|form|input)[^>]*\/?>/gi, '');
+
+  // Restore YouTube iframes
+  for (let i = 0; i < youtubeIframes.length; i++) {
+    result = result.replace(`__YOUTUBE_IFRAME_${i}__`, youtubeIframes[i]);
+  }
+
+  return result;
 }

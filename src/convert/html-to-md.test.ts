@@ -89,10 +89,42 @@ describe('htmlToMarkdown', () => {
     expect(result).toBe('');
   });
 
+  it('converts YouTube iframe to thumbnail link', () => {
+    const html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="560" height="315"></iframe>';
+    const result = htmlToMarkdown(html, defaultContext);
+    expect(result).toContain('[![YouTube]');
+    expect(result).toContain('img.youtube.com/vi/dQw4w9WgXcQ');
+    expect(result).toContain('youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it('converts YouTube nocookie iframe to thumbnail link', () => {
+    const html = '<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" width="560" height="315"></iframe>';
+    const result = htmlToMarkdown(html, defaultContext);
+    expect(result).toContain('[![YouTube]');
+    expect(result).toContain('img.youtube.com/vi/dQw4w9WgXcQ');
+  });
+
   it('converts details/summary to foldable callout', () => {
     const html = '<details><summary>Click me</summary><p>Hidden content</p></details>';
     const result = htmlToMarkdown(html, defaultContext);
     expect(result).toContain('> [!example]- Click me');
     expect(result).toContain('Hidden content');
+  });
+
+  it('converts draw.io diagram to clickable PNG thumbnail', () => {
+    const html = '<div drawio-diagram="281"><img src="http://bookstack.local:6875/uploads/images/drawio/2024-01/drawing.png" alt="my-diagram"></div>';
+    const result = htmlToMarkdown(html, defaultContext);
+    expect(result).toContain('[![draw.io: my-diagram]');
+    expect(result).toContain('http://bookstack.local:6875/uploads/images/drawio/2024-01/drawing.png');
+    expect(result).toContain('http://bookstack.local:6875/link/281');
+    expect(result).not.toContain('[!warning]');
+  });
+
+  it('converts draw.io diagram without image to plain link', () => {
+    // Turndown requires non-empty content to process a node, so add a text placeholder
+    const html = '<div drawio-diagram="281"><span>drawing</span></div>';
+    const result = htmlToMarkdown(html, defaultContext);
+    expect(result).toContain('draw.io Zeichnung bearbeiten');
+    expect(result).toContain('http://bookstack.local:6875/link/281');
   });
 });
