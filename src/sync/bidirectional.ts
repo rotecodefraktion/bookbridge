@@ -8,7 +8,7 @@ import {
   loadMapping,
   saveMapping,
 } from '../models/mapping';
-import { readFrontmatter, stripFrontmatter } from '../models/frontmatter';
+import { readFrontmatter, stripFrontmatter, stripNavLine } from '../models/frontmatter';
 import {
   isBookSelected,
   computeHash,
@@ -99,7 +99,7 @@ export async function bidirectionalSync(
     }
 
     const content = await app.vault.read(file);
-    const stripped = stripFrontmatter(content);
+    const stripped = stripNavLine(stripFrontmatter(content));
     const hash = computeHash(stripped);
     localByBookstackId.set(fm.bookstack_id, { file, hash });
   }
@@ -125,7 +125,7 @@ export async function bidirectionalSync(
 
     // Skip empty files
     const rawContent = await app.vault.read(file);
-    const stripped = stripFrontmatter(rawContent);
+    const stripped = stripNavLine(stripFrontmatter(rawContent));
     if (stripped.trim().length === 0) continue;
 
     newLocalItems.push({
@@ -344,7 +344,7 @@ async function buildConflictInfo(
 ): Promise<ConflictInfo | null> {
   if (!item.localFile || !item.entry) return null;
 
-  const localContent = stripFrontmatter(await app.vault.read(item.localFile));
+  const localContent = stripNavLine(stripFrontmatter(await app.vault.read(item.localFile)));
 
   let remoteContent = '';
   try {

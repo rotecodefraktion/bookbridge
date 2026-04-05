@@ -61,3 +61,11 @@ export function stripFrontmatter(content: string): string {
   }
   return content;
 }
+
+/**
+ * Strip the navigation line injected by pull (↑ [[...]] · ← [[...]] · → [[...]]).
+ * This line is not part of the actual content and must be excluded from hash computation.
+ */
+export function stripNavLine(content: string): string {
+  return content.replace(/^↑ \[\[.*\]\].*\n\n?/, '');
+}

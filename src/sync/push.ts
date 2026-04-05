@@ -11,7 +11,7 @@ import {
   loadMapping,
   saveMapping,
 } from '../models/mapping';
-import { readFrontmatter, stripFrontmatter, setFrontmatter, BookBridgeFrontmatter } from '../models/frontmatter';
+import { readFrontmatter, stripFrontmatter, stripNavLine, setFrontmatter, BookBridgeFrontmatter } from '../models/frontmatter';
 import {
   isBookSelected,
   computeHash,
@@ -168,7 +168,7 @@ export async function pushSync(
 
       const rawContent = await app.vault.read(file);
       let content = stripFrontmatter(rawContent);
-      content = content.replace(/^↑ \[\[.*\]\].*\n\n?/, '');
+      content = stripNavLine(content);
       const hash = computeHash(content);
 
       const entry = findEntry(mapping, fm.bookstack_id);
@@ -216,7 +216,7 @@ export async function pushSync(
 
       const rawContent = await app.vault.read(file);
       let content = stripFrontmatter(rawContent);
-      content = content.replace(/^↑ \[\[.*\]\].*\n\n?/, '');
+      content = stripNavLine(content);
       const hash = computeHash(content);
 
       // Skip empty files
@@ -368,7 +368,7 @@ async function pushNewPage(
   }
 
   // Strip nav line before conversion
-  const cleanContent = content.replace(/^↑ \[\[.*\]\].*\n\n?/, '');
+  const cleanContent = stripNavLine(content);
 
   // Step 1: Create page with placeholder HTML (need page ID for image uploads)
   const placeholderHtml = markdownToHtml(cleanContent, context);
@@ -434,7 +434,7 @@ async function pushPage(
   settings: BookBridgeSettings,
 ): Promise<void> {
   // Strip nav line before conversion
-  const cleanContent = content.replace(/^↑ \[\[.*\]\].*\n\n?/, '');
+  const cleanContent = stripNavLine(content);
 
   // Upload local images and build asset-to-URL map
   const assetToUrl = await uploadLocalImages(app, client, cleanContent, frontmatter.bookstack_id, settings);
